@@ -103,6 +103,12 @@ const categoryNames: Record<Category, string> = {
   leadership: "Leadership",
 };
 
+const categoryMarks: Record<Category, string> = {
+  emotions: "E",
+  intellectual: "I",
+  leadership: "L",
+};
+
 function mergeState(saved: unknown): AppState {
   if (!saved || typeof saved !== "object") return initialState;
   const next = saved as Partial<AppState>;
@@ -600,7 +606,11 @@ function HomeView({ state, startLesson, navigate, reviewCount }: { state: AppSta
         <div className="section-heading"><div><span className="eyebrow">A FIRST LOOK</span><h2>Three words you’ll meet today</h2></div><button onClick={startLesson}>See all ten →</button></div>
         <div className="word-preview-grid">
           {[dayFiveWords[0], dayFiveWords[4], dayFiveWords[7]].map((item, index) => (
-            <article key={item.id}><span>{String(index + 1).padStart(2, "0")}</span><small>{categoryNames[item.category]}</small><h3>{item.word}</h3><i>{item.partOfSpeech} · {item.pronunciation}</i><p>{item.meaning}</p></article>
+            <article key={item.id}>
+              <span className={`word-emblem emblem-${item.category}`} aria-hidden="true">{categoryMarks[item.category]}</span>
+              <i className="card-divider" aria-hidden="true" />
+              <div className="preview-card-copy"><small>{String(index + 1).padStart(2, "0")} · {categoryNames[item.category]}</small><h3>{item.word}</h3><i>{item.partOfSpeech} · {item.pronunciation}</i><p>{item.meaning}</p></div>
+            </article>
           ))}
         </div>
       </section>
@@ -615,8 +625,11 @@ function WordCard({ item, index, state, speak, toggleList }: { item: VocabularyW
     <article className="word-card">
       <div className="word-card-top"><span>{String(index + 1).padStart(2, "0")}</span><div className="word-actions"><button className={favourite ? "selected" : ""} onClick={() => toggleList("favouriteIds", item.id)} aria-pressed={favourite} aria-label={`${favourite ? "Remove" : "Add"} ${item.word} ${favourite ? "from" : "to"} favourites`}>☆</button><button className={difficult ? "selected difficult" : ""} onClick={() => toggleList("difficultIds", item.id)} aria-pressed={difficult}>Difficult</button></div></div>
       <small>{categoryNames[item.category]}</small>
-      <h3>{item.word} <i>{item.partOfSpeech}</i></h3>
-      <button className="pronunciation" onClick={() => speak(item)} aria-label={`Play pronunciation for ${item.word}`}><span aria-hidden="true">▶</span>{item.pronunciation}{item.ipa && <i>{item.ipa}</i>}</button>
+      <div className="word-card-feature">
+        <span className={`word-emblem emblem-${item.category}`} aria-hidden="true">{categoryMarks[item.category]}</span>
+        <i className="card-divider" aria-hidden="true" />
+        <div className="word-card-title"><h3>{item.word} <i>{item.partOfSpeech}</i></h3><button className="pronunciation" onClick={() => speak(item)} aria-label={`Play pronunciation for ${item.word}`}><span aria-hidden="true">▶</span>{item.pronunciation}{item.ipa && <i>{item.ipa}</i>}</button></div>
+      </div>
       <p>{item.meaning}</p>
       <blockquote>{item.example}</blockquote>
     </article>
