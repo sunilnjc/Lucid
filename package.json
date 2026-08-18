@@ -9,8 +9,10 @@
     "dev": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext dev",
     "build": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext build",
     "start": "WRANGLER_LOG_PATH=.wrangler/wrangler.log vinext start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
+    "ios:content": "node scripts/export-ios-content.mjs",
+    "ios:build": "xcodebuild -project ios/Lucid/Lucid.xcodeproj -scheme Lucid -configuration Debug -sdk iphonesimulator -derivedDataPath .build/ios CODE_SIGNING_ALLOWED=NO build",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
