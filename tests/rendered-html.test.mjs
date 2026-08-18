@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 import ts from "typescript";
 
@@ -50,6 +50,19 @@ const expectedSeedWords = [
   "Cultivate",
 ];
 
+const expectedDayFiveWords = [
+  "Wistful",
+  "Disquieted",
+  "Buoyant",
+  "Empathetic",
+  "Incisive",
+  "Tenable",
+  "Reconcile",
+  "Unflappable",
+  "Strategic",
+  "Champion",
+];
+
 const expectedCategoryCounts = {
   emotions: 4,
   intellectual: 3,
@@ -57,7 +70,8 @@ const expectedCategoryCounts = {
 };
 
 let renderedPagePromise;
-let vocabularyDataPromise;
+const typescriptModulePromises = new Map();
+let applicationSourcePromise;
 
 async function renderedPage() {
   if (!renderedPagePromise) {
@@ -91,27 +105,59 @@ async function renderedPage() {
   return renderedPagePromise;
 }
 
-async function vocabularyData() {
-  if (!vocabularyDataPromise) {
-    vocabularyDataPromise = (async () => {
-      const source = await readFile(
-        new URL("lib/vocabulary-data.ts", root),
-        "utf8",
-      );
-      const { outputText } = ts.transpileModule(source, {
+async function typescriptModule(relativePath) {
+  if (!typescriptModulePromises.has(relativePath)) {
+    typescriptModulePromises.set(
+      relativePath,
+      (async () => {
+        const source = await readFile(new URL(relativePath, root), "utf8");
+        const { diagnostics = [], outputText } = ts.transpileModule(source, {
         compilerOptions: {
           module: ts.ModuleKind.ESNext,
           target: ts.ScriptTarget.ES2022,
         },
-        fileName: "vocabulary-data.ts",
+          fileName: relativePath,
         reportDiagnostics: true,
       });
-      const moduleUrl = `data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`;
-      return import(moduleUrl);
+
+        const errors = diagnostics.filter(
+          ({ category }) => category === ts.DiagnosticCategory.Error,
+        );
+        assert.deepEqual(
+          errors.map(({ messageText }) =>
+            ts.flattenDiagnosticMessageText(messageText, "\n"),
+          ),
+          [],
+          `${relativePath} must be valid TypeScript`,
+        );
+
+        const moduleUrl = `data:text/javascript;base64,${Buffer.from(outputText).toString("base64")}`;
+        return import(moduleUrl);
+      })(),
+    );
+  }
+
+  return typescriptModulePromises.get(relativePath);
+}
+
+async function vocabularyData() {
+  return typescriptModule("lib/vocabulary-data.ts");
+}
+
+async function applicationSource() {
+  if (!applicationSourcePromise) {
+    applicationSourcePromise = (async () => {
+      const files = await readdir(new URL("app/", root), { recursive: true });
+      const sourceFiles = files.filter(
+        (file) => file.endsWith(".tsx") || file.endsWith(".ts"),
+      );
+      return Promise.all(
+        sourceFiles.map((file) => readFile(new URL(`app/${file}`, root), "utf8")),
+      ).then((sources) => sources.join("\n"));
     })();
   }
 
-  return vocabularyDataPromise;
+  return applicationSourcePromise;
 }
 
 function countBy(items, key) {
@@ -126,6 +172,14 @@ function countBy(items, key) {
 
 function assertUnique(items, label) {
   assert.equal(new Set(items).size, items.length, `${label} must be unique`);
+}
+
+function taggedValues(entry, key) {
+  return entry[key] ?? entry.tags?.[key];
+}
+
+function vocabularyText(entry) {
+  return entry.word ?? entry.term;
 }
 
 function assertCompleteWord(entry) {
@@ -163,7 +217,7 @@ function assertCompleteWord(entry) {
   );
 }
 
-test("server-renders the vocabulary product shell", async () => {
+test("server-renders the professional-English product handoff", async () => {
   const { status, contentType, html } = await renderedPage();
 
   assert.equal(status, 200);
@@ -171,18 +225,16 @@ test("server-renders the vocabulary product shell", async () => {
   assert.match(html, /<html[^>]+lang=["']en["']/i);
   assert.match(
     html,
-    /<title>Lucid\s*(?:—|&mdash;|&#x2014;)\s*Advanced English Vocabulary Coach<\/title>/i,
+    /<title>Lucid\s*(?:—|&mdash;|&#x2014;)\s*Professional English for Your Role<\/title>/i,
+  );
+  assert.match(
+    html,
+    /<meta[^>]+name=["']description["'][^>]+content=["'][^"']*Role-specific daily vocabulary practice/i,
   );
   assert.match(html, /<main\b/i);
-  assert.match(html, /<nav\b/i);
-  assert.match(html, /Lucid/i);
-  assert.match(html, /Day\s*5/i);
-  assert.match(html, /Review quiz today/i);
-  assert.match(html, /Emotions/i);
-  assert.match(html, /Intellectual conversation/i);
-  assert.match(html, /Leadership/i);
-  assert.match(html, /History/i);
-  assert.match(html, /Progress/i);
+  assert.match(html, /class=["'][^"']*loading-screen/i);
+  assert.match(html, /<h1>Lucid<\/h1>/i);
+  assert.match(html, /Preparing your professional English path/i);
 });
 
 test("does not ship starter metadata or the loading skeleton", async () => {
@@ -197,9 +249,7 @@ test("does not ship starter metadata or the loading skeleton", async () => {
   assert.doesNotMatch(page, starterCopy);
   assert.doesNotMatch(layout, starterCopy);
   assert.doesNotMatch(page, /_sites-preview|SkeletonPreview/);
-  assert.match(vocabularyApp, /DAY 5[^\n]+ADVANCED ENGLISH PRACTICE/i);
-  assert.match(vocabularyApp, /QUICK USAGE EXERCISE/i);
-  assert.match(vocabularyApp, /review quiz/i);
+  assert.match(vocabularyApp, /Professional English/i);
 });
 
 test("preserves the exact 40-word learning history", async () => {
@@ -239,6 +289,11 @@ test("Day 5 teaches exactly 10 new words with a 4/3/3 split", async () => {
 
   assert.equal(dayFiveWords.length, 10);
   assert.ok(dayFiveWords.every(({ day }) => day === 5));
+  assert.deepEqual(
+    dayFiveWords.map(({ word }) => word),
+    expectedDayFiveWords,
+    "Day 5 must preserve the previously delivered lesson",
+  );
   assert.deepEqual(countBy(dayFiveWords, "category"), expectedCategoryCounts);
   assert.deepEqual(
     categories.map(({ label }) => label),
@@ -271,6 +326,193 @@ test("Day 5 teaches exactly 10 new words with a 4/3/3 split", async () => {
     allWords.map(({ word }) => word.toLocaleLowerCase("en")),
     "all taught words",
   );
+});
+
+test("builds a daily plan with three active words plus due review", async () => {
+  const { createDailyPlan, createWordMastery } = await typescriptModule(
+    "lib/learning-engine.ts",
+  );
+  const words = Array.from({ length: 6 }, (_, index) => ({
+    id: `professional-${index + 1}`,
+    active: true,
+    roles: ["software engineer"],
+    situations: ["stakeholder meetings"],
+    goals: ["speak with precision"],
+    usefulness: 5 - (index % 2),
+    difficulty: 4,
+  }));
+  const due = createWordMastery(words[0].id, "2026-08-16");
+  const plan = createDailyPlan({
+    date: "2026-08-18",
+    profile: {
+      role: "software engineer",
+      seniority: "senior",
+      situations: ["stakeholder meetings"],
+      goals: ["speak with precision"],
+    },
+    words,
+    masteryByWordId: { [words[0].id]: due },
+  });
+
+  assert.equal(plan.activeNewWords.length, 3);
+  assert.ok(
+    plan.activeNewWords.every(({ word }) => word.id !== due.wordId),
+    "introduced review words must not be selected as active new words",
+  );
+  assert.deepEqual(
+    plan.dueReviews.map(({ word }) => word.id),
+    [due.wordId],
+    "all due review words must accompany the three active words",
+  );
+});
+
+test("uses the exact 1/3/7/14/30-day spaced-review ladder", async () => {
+  const { SRS_INTERVAL_DAYS } = await typescriptModule(
+    "lib/learning-engine.ts",
+  );
+
+  assert.deepEqual([...SRS_INTERVAL_DAYS], [1, 3, 7, 14, 30]);
+});
+
+test("ships broad role coverage and at least 60 professionally tagged words", async () => {
+  const content = await typescriptModule("lib/professional-content.ts");
+  const roles =
+    content.professionalRoles ??
+    content.roles ??
+    Object.values(content).find(
+      (value) =>
+        Array.isArray(value) &&
+        value.length >= 8 &&
+        value.every(
+          (item) =>
+            typeof item === "string" ||
+            (item && typeof item === "object" && !item.word),
+        ),
+    );
+  const words =
+    content.professionalWords ??
+    content.professionalVocabulary ??
+    content.taggedWords ??
+    Object.values(content).find(
+      (value) =>
+        Array.isArray(value) &&
+        value.length >= 60 &&
+        value.every(
+          (item) =>
+            item && typeof item === "object" && vocabularyText(item),
+        ),
+    );
+
+  assert.ok(Array.isArray(roles), "professional content must export its roles");
+  assert.ok(roles.length >= 8, "onboarding must offer at least eight roles");
+  assertUnique(
+    roles.map((role) =>
+      String(
+        typeof role === "string"
+          ? role
+          : role.id ?? role.label ?? role.name ?? role.title,
+      ).toLocaleLowerCase("en"),
+    ),
+    "professional roles",
+  );
+
+  assert.ok(
+    Array.isArray(words),
+    "professional content must export its tagged vocabulary",
+  );
+  assert.ok(
+    words.length >= 60,
+    "the adaptive vocabulary pool must contain at least 60 entries",
+  );
+  assertUnique(
+    words.map(({ id }) => id),
+    "professional word IDs",
+  );
+  assertUnique(
+    words.map((entry) => vocabularyText(entry).toLocaleLowerCase("en")),
+    "professional vocabulary",
+  );
+
+  for (const entry of words) {
+    const term = vocabularyText(entry);
+    assert.ok(entry.id?.trim(), "every professional word needs an ID");
+    assert.ok(term?.trim(), "every professional word needs display text");
+    for (const tag of ["roles", "situations", "seniority", "goals"]) {
+      const values = taggedValues(entry, tag);
+      assert.ok(
+        Array.isArray(values) && values.length > 0,
+        `${term} needs at least one ${tag} tag`,
+      );
+    }
+    assert.ok(
+      Array.isArray(entry.collocations) && entry.collocations.length > 0,
+      `${term} needs a useful collocation`,
+    );
+    for (const field of ["whenToUse", "avoidOrMisuse", "mission"]) {
+      assert.ok(
+        entry[field]?.trim(),
+        `${term}.${field} must support the professional lesson`,
+      );
+    }
+  }
+});
+
+test("exposes professional onboarding, practice, and beta-feedback surfaces", async () => {
+  const source = await applicationSource();
+
+  for (const required of [
+    /profession(?:al role)?/i,
+    /seniority/i,
+    /communication situations?/i,
+    /(?:learning )?goals?/i,
+  ]) {
+    assert.match(source, required, `missing onboarding field ${required}`);
+  }
+
+  for (const required of [
+    /(?:workplace|today['’]s) (?:scenario|mission)/i,
+    /when to use/i,
+    /avoid(?: this)?/i,
+    /collocations?/i,
+    /written practice/i,
+    /spoken practice/i,
+  ]) {
+    assert.match(source, required, `missing professional lesson surface ${required}`);
+  }
+
+  assert.match(source, /beta feedback/i);
+  assert.match(source, /fetch\(["']\/api\/feedback["']/);
+  assert.match(source, /<textarea\b/i, "beta feedback needs a written entry field");
+});
+
+test("keeps Settings and lesson progress available in responsive navigation", async () => {
+  const [source, css] = await Promise.all([
+    applicationSource(),
+    readFile(new URL("app/globals.css", root), "utf8"),
+  ]);
+
+  assert.match(source, /label:\s*["']Settings["']/);
+  assert.match(source, /className=["']mobile-nav["']/);
+  assert.match(
+    source,
+    /className=["']mobile-nav["'][\s\S]{0,800}(?:navItems\.map|Settings)/,
+    "mobile navigation must retain access to Settings",
+  );
+  assert.match(source, /className=["']lesson-progress["']/);
+  assert.match(css, /@media\s*\([^)]*max-width/i);
+  assert.match(css, /\.mobile-nav\b/);
+  assert.match(css, /\.lesson-progress\b/);
+});
+
+test("uses a dynamic greeting and date instead of the original fixed welcome", async () => {
+  const [{ html }, source] = await Promise.all([
+    renderedPage(),
+    applicationSource(),
+  ]);
+  const fixedWelcome = /Good evening,\s*Sunil|MONDAY\s*[·•-]\s*17 AUGUST/i;
+
+  assert.doesNotMatch(source, fixedWelcome);
+  assert.doesNotMatch(html, fixedWelcome);
 });
 
 test("the Day 5 exercise has five fills and two sentence prompts", async () => {

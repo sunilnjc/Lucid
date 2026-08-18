@@ -15,6 +15,13 @@
       "when": 1786985674442,
       "tag": "0001_deep_siren",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1787036187455,
+      "tag": "0002_green_bromley",
+      "breakpoints": true
     }
   ]
 }

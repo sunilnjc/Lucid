@@ -17,13 +17,13 @@ export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
   const host = requestHeaders.get("x-forwarded-host") ?? requestHeaders.get("host") ?? "localhost:3001";
   const protocol = requestHeaders.get("x-forwarded-proto") ?? (host.startsWith("localhost") ? "http" : "https");
-  const image = `${protocol}://${host}/og.jpg`;
-  const title = "Lucid — Advanced English Vocabulary Coach";
-  const description = "Ten precise words a day for emotional expression, intellectual conversation, and leadership.";
+  const image = `${protocol}://${host}/og-role-based.png`;
+  const title = "Lucid — Professional English for Your Role";
+  const description = "Role-specific daily vocabulary practice for clearer meetings, emails, presentations, and professional conversations.";
   return {
     title,
     description,
-    openGraph: { title, description, images: [{ url: image, width: 1200, height: 800, alt: "Lucid — 10 precise words. Every day." }] },
+    openGraph: { title, description, images: [{ url: image, width: 1536, height: 1024, alt: "Lucid — professional vocabulary you can use at work." }] },
     twitter: { card: "summary_large_image", title, description, images: [image] },
   };
 }

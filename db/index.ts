@@ -11,6 +11,19 @@ const CREATE_LEARNER_STATE_TABLE = `
   )
 `;
 
+const CREATE_BETA_FEEDBACK_TABLE = `
+  CREATE TABLE IF NOT EXISTS beta_feedback (
+    id TEXT PRIMARY KEY NOT NULL,
+    user_key TEXT NOT NULL,
+    role_id TEXT NOT NULL,
+    rating INTEGER NOT NULL,
+    helpful TEXT NOT NULL,
+    confusing TEXT DEFAULT '' NOT NULL,
+    missing TEXT DEFAULT '' NOT NULL,
+    created_at INTEGER DEFAULT (unixepoch() * 1000) NOT NULL
+  )
+`;
+
 let initialization: Promise<void> | undefined;
 
 function getD1Binding() {
@@ -28,8 +41,10 @@ export async function initializeDatabase() {
 
   if (!initialization) {
     initialization = binding
-      .prepare(CREATE_LEARNER_STATE_TABLE)
-      .run()
+      .batch([
+        binding.prepare(CREATE_LEARNER_STATE_TABLE),
+        binding.prepare(CREATE_BETA_FEEDBACK_TABLE),
+      ])
       .then(() => undefined)
       .catch((error: unknown) => {
         initialization = undefined;
