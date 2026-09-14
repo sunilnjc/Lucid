@@ -12,7 +12,8 @@
     "test": "npm run build && node --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "ios:content": "node scripts/export-ios-content.mjs",
-    "ios:build": "xcodebuild -project ios/Lucid/Lucid.xcodeproj -scheme Lucid -configuration Debug -sdk iphonesimulator -derivedDataPath .build/ios CODE_SIGNING_ALLOWED=NO build",
+    "ios:test": "node scripts/test-ios.mjs",
+    "ios:build": "xcodebuild -project ios/Lucid/Lucid.xcodeproj -scheme Lucid -configuration Debug -sdk iphonesimulator -derivedDataPath .build/ios build",
     "db:generate": "drizzle-kit generate"
   },
   "dependencies": {

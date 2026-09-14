@@ -1,0 +1,7 @@
+// Copy to Config.local.xcconfig. These two values are public client configuration.
+// Never put a service-role key, SMTP password, or access token in an iOS build.
+LUCID_SUPABASE_URL = https:/$()/YOUR_PROJECT_REF.supabase.co
+LUCID_SUPABASE_PUBLISHABLE_KEY = YOUR_PUBLIC_PUBLISHABLE_KEY
+// Enable only after custom email delivery and both OTP templates have been tested.
+LUCID_EMAIL_DELIVERY_READY = NO
+// Do not override the Release authentication gate until launch checks are complete.

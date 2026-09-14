@@ -1,0 +1,9 @@
+LUCID_SUPABASE_URL =
+LUCID_SUPABASE_PUBLISHABLE_KEY =
+// Release gate stays closed until live delivery, deletion and device QA are complete.
+LUCID_CLOUD_AUTH_ENABLED = NO
+LUCID_CLOUD_AUTH_ENABLED[config=Debug] = YES
+LUCID_EMAIL_DELIVERY_READY = NO
+// Owner-only native preview: both signup and returning-user OTP emails verified.
+LUCID_EMAIL_DELIVERY_READY[config=Debug] = YES
+#include? "Config.local.xcconfig"

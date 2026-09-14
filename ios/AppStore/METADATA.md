@@ -14,13 +14,13 @@ App Store names are unique. If “Lucid: Professional English” is unavailable,
 
 ## Promotional text
 
-Three role-specific words a day, realistic workplace context, spoken and written practice, and spaced review that helps professional English become usable language.
+Role-specific words at your pace, realistic workplace context, spoken and written practice, and spaced review that helps professional English become usable language.
 
 ## Description
 
 Lucid helps professionals move beyond recognising difficult words to using them naturally in meetings, emails, presentations, recommendations, and everyday work conversations.
 
-Choose your role, seniority, common communication situations, and goals. Lucid creates a focused daily lesson with three useful words selected for your real work—not a random vocabulary list.
+Choose your role, seniority, common communication situations, and goals. Set a manageable pace of one, two, or three words a day. Lucid selects useful words for your real work from its current role collection. When you finish the collection, keep practising with review.
 
 EVERY WORD IN CONTEXT
 
@@ -28,19 +28,23 @@ Understand the meaning, pronunciation, natural pairings, professional example, b
 
 PRACTISE, DON'T JUST READ
 
-Write a sentence or say it aloud. Lucid gives a transparent on-device pattern check and helps you add stronger context and more natural collocations.
+Write a sentence or say it aloud. Compare it with a professional example and use a transparent on-device pattern check. This check looks for the word and reference phrases; it does not judge grammar or meaning. Your draft stays saved if you leave and return.
 
 REMEMBER IT
 
-Spaced review brings words back after 1, 3, 7, 14, and 30 days. Difficult words return sooner. Mastery requires successful retrieval across multiple days, including long-term recall.
+Spaced review brings words back after 1, 3, 7, 14, and 30 days. Try to recall the word before revealing it, then honestly assess your answer. Difficult words return sooner. Mastery reflects self-assessed successful retrieval on three different days, including a 30-day review.
+
+SEE YOUR PRACTICE GROW
+
+Earn practice XP, build a weekly activity history, and reach learning milestones. Review-only days count too. A missed day never erases what you learned.
 
 BUILT FOR PROFESSIONAL ROLES
 
-Initial role paths include Finance & Accounting, Project & Product, Technology & Engineering, Sales & Business Development, HR & People Leadership, Consulting & Strategy, Operations & Supply Chain, and Healthcare.
+Finance & Accounting has a structured 90-word path: six chapters, 30 lessons, and realistic workplace challenges, from close updates to executive recommendations. Each three-word lesson may span several days at your selected pace. The other seven roles currently have smaller starter collections: Project & Product, Technology & Engineering, Sales & Business Development, HR & People Leadership, Consulting & Strategy, Operations & Supply Chain, and Healthcare.
 
 PRIVATE BY DESIGN
 
-No account is required. Your profile and learning progress stay on your device. Lucid contains no advertising or cross-app tracking.
+No account is required. Your profile, drafts, and learning progress stay on your device. Export a private backup and restore it from Settings. Lucid contains no advertising or cross-app tracking. Optional beta feedback is sent only when you submit it.
 
 ## Keywords
 
@@ -54,9 +58,11 @@ professional english,vocabulary,business english,career,meetings,communication,s
 
 ## What's New — 1.0
 
-Welcome to Lucid for iPhone and iPad. Build a role-specific learning path, practise three professional words each day, use voice and written missions, and retain what you learn with 1/3/7/14/30-day review.
+Welcome to Lucid for iPhone and iPad. Build a role-specific learning path, practise at your own pace, use voice and written missions, save your drafts, and keep returning with spaced review, practice XP, and milestones.
 
 ## App Review notes
+
+This draft describes the guest-only Release configuration. Cloud sign-in is a development preview and remains gated off for Release. Update these notes and the public privacy disclosures, then verify live email delivery and deletion, before changing that gate.
 
 Lucid does not require an account or login. All primary features are available immediately after the in-app role onboarding.
 

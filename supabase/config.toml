@@ -1,0 +1,4 @@
+project_id = "lucid"
+
+[functions.delete-account]
+verify_jwt = false

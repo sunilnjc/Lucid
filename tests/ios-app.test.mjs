@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { stripTypeScriptTypes } from "node:module";
 import test from "node:test";
 
 const root = new URL("../", import.meta.url);
@@ -11,15 +12,41 @@ async function text(path) {
 test("iOS catalogue stays aligned with the canonical professional content", async () => {
   const raw = await text("ios/Lucid/Lucid/Resources/professional-content.json");
   const catalogue = JSON.parse(raw);
+  const compiled = stripTypeScriptTypes(await text("lib/professional-content.ts"));
+  const canonical = await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
+  assert.deepEqual(catalogue.words, canonical.professionalWords);
+  assert.deepEqual(catalogue.learningPaths, canonical.professionalLearningPaths);
 
   assert.equal(catalogue.schemaVersion, 1);
   assert.equal(catalogue.roles.length, 8);
   assert.equal(catalogue.seniorityLevels.length, 5);
   assert.equal(catalogue.goals.length, 8);
-  assert.equal(catalogue.words.length, 64);
-  assert.equal(new Set(catalogue.words.map(({ id }) => id)).size, 64);
+  assert.equal(catalogue.words.length, 143);
+  assert.equal(new Set(catalogue.words.map(({ id }) => id)).size, catalogue.words.length);
+  assert.equal(catalogue.learningPaths.length, 1);
+  const path = catalogue.learningPaths[0];
+  assert.equal(path.roleId, "finance-accounting");
+  assert.equal(path.modules.length, 6);
+  assert.ok(path.modules.every(({ lessons }) => lessons.length === 5));
+  const lessons = path.modules.flatMap(({ lessons }) => lessons);
+  const ids = lessons.flatMap(({ wordIds }) => wordIds);
+  assert.equal(ids.length, 90);
+  assert.equal(new Set(ids).size, 90);
+  assert.ok(lessons.every(lesson => lesson.wordIds.length === 3 && lesson.objective && lesson.challenge && lesson.exampleResponse));
+  assert.ok(lessons.every(lesson => lesson.wordIds.every(id => catalogue.words.some(word => word.id === id && word.learningMode === "active" && word.roles.includes(path.roleId) && word.situations.includes(lesson.situationId)))));
   assert.ok(catalogue.roles.every(({ situations }) => situations.length === 4));
   assert.ok(catalogue.words.every(({ collocations }) => collocations.length >= 2));
+  let contexts = 0;
+  for (const word of catalogue.words) {
+    for (const [roleId, context] of Object.entries(word.roleContexts ?? {})) {
+      contexts += 1;
+      assert.ok(word.roles.includes(roleId), `${word.id}: context belongs to an untagged role`);
+      for (const field of ["meaning", "example", "whenToUse", "avoidOrMisuse", "mission"]) assert.ok(context[field]?.trim());
+      assert.ok(context.collocations.length >= 2);
+      assert.ok(context.example.toLowerCase().includes(word.term.toLowerCase()));
+    }
+  }
+  assert.equal(contexts, 6);
 });
 
 test("iOS implementation is native, mobile-accessible, and review ready", async () => {

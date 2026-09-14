@@ -25,6 +25,7 @@ const payload = {
   seniorityLevels: content.seniorityLevels,
   goals: content.communicationGoals,
   words: content.professionalWords,
+  learningPaths: content.professionalLearningPaths,
 };
 
 await mkdir(dirname(outputPath), { recursive: true });

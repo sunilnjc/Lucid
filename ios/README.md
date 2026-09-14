@@ -35,8 +35,10 @@ xcodebuild \
 
 ## Data flow
 
-- Profile, learning progress, favourites, streak, reminder preferences, and spaced-review state are stored with `UserDefaults` on the device.
-- Written practice is checked locally and is not persisted.
+- Profile, activity, favourites, streak, reminder preferences, drafts, and spaced-review state are stored in a versioned file in Application Support, with atomic writes, iOS Data Protection, and a last-known-good backup. Existing UserDefaults data migrates on first open.
+- Written practice is checked locally and saved on the device. Drafts are excluded from the prepared cloud payload.
+- Settings → Export a learning backup saves a portable JSON copy, including drafts. Keep exported files private. Restore merges records rather than replacing newer work.
+- No cloud service or paid plan is configured in this local development build. Email account code is prepared but disabled until public Supabase configuration is supplied. See [AppStore/AUTH_SETUP.md](AppStore/AUTH_SETUP.md).
 - Spoken practice uses `SFSpeechRecognizer` only after the learner taps the microphone.
 - Pronunciation uses `AVSpeechSynthesizer`.
 - Daily reminders use local `UNUserNotificationCenter` scheduling.
@@ -44,3 +46,9 @@ xcodebuild \
 - StoreKit's native `requestReview` environment action is used only after meaningful lesson milestones.
 
 See [AppStore/APP_STORE_SUBMISSION.md](AppStore/APP_STORE_SUBMISSION.md) for the release checklist.
+
+## Local behavioral tests
+
+Run npm run ios:test on this Mac to exercise the actual Swift learning, persistence and merge code. Tests use isolated temporary folders, with no network calls or notification requests.
+
+See [AppStore/LAUNCH_READINESS.md](AppStore/LAUNCH_READINESS.md) for the user-experience audit, implemented changes and remaining October launch work.

@@ -124,6 +124,15 @@ export type ProfessionalSituation = {
   goalIds: readonly CommunicationGoalId[];
 };
 
+export type ProfessionalWordContext = {
+  meaning: string;
+  collocations: readonly string[];
+  example: string;
+  whenToUse: string;
+  avoidOrMisuse: string;
+  mission: string;
+};
+
 export type ProfessionalWord = {
   id: string;
   term: string;
@@ -142,6 +151,7 @@ export type ProfessionalWord = {
   whenToUse: string;
   avoidOrMisuse: string;
   mission: string;
+  roleContexts?: Partial<Record<RoleId, ProfessionalWordContext>>;
 };
 
 export type ProfessionalVocabularyEntry = ProfessionalWord;
@@ -417,7 +427,3241 @@ const ALL_SENIORITY: readonly SeniorityLevelId[] = [
 const LEADERSHIP_SENIORITY: readonly SeniorityLevelId[] = ["manager", "senior-leader", "executive"];
 const SPECIALIST_SENIORITY: readonly SeniorityLevelId[] = ["experienced-contributor", "manager", "senior-leader"];
 
+export type ProfessionalPathLesson = {
+  id: string; title: string; situationId: SituationId; objective: string;
+  wordIds: string[]; challenge: string; exampleResponse: string;
+};
+
+export type ProfessionalLearningPath = {
+  id: string; roleId: RoleId; title: string; description: string;
+  modules: { id: string; title: string; outcome: string; lessons: ProfessionalPathLesson[] }[];
+};
+
+// Authored educational scenarios, not accounting or investment advice.
+const financePathWords: readonly ProfessionalWord[] = [
+  {
+    "id": "finance-discrepancy",
+    "term": "discrepancy",
+    "partOfSpeech": "noun",
+    "pronunciation": "dih-SKREP-uhn-see",
+    "meaning": "A difference between figures, records, or statements that were expected to agree.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:month-end-close",
+      "finance:audit-discussion"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "identify a discrepancy",
+      "explain the discrepancy",
+      "resolve a discrepancy"
+    ],
+    "example": "We found a £240 discrepancy between the travel summary and the supporting report.",
+    "whenToUse": "Use it to name a specific mismatch before you know or explain its cause.",
+    "avoidOrMisuse": "A discrepancy is a difference to investigate; it does not by itself establish fraud or an error in either source.",
+    "mission": "Describe a discrepancy between two fictional reports and say what you would compare next."
+  },
+  {
+    "id": "finance-outstanding",
+    "term": "outstanding",
+    "partOfSpeech": "adjective",
+    "pronunciation": "owt-STAN-ding",
+    "meaning": "Not yet completed, settled, or resolved at the time being discussed.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:month-end-close",
+      "finance:audit-discussion"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "align"
+    ],
+    "collocations": [
+      "outstanding item",
+      "outstanding balance",
+      "remain outstanding"
+    ],
+    "example": "Two supplier confirmations remain outstanding, and each has a named follow-up owner.",
+    "whenToUse": "Use it in a status update to distinguish open work or unpaid amounts from completed items.",
+    "avoidOrMisuse": "Outstanding can also mean excellent; specify an item, balance, or action to make the intended meaning clear.",
+    "mission": "Name one outstanding close action, its owner, and the expected update time."
+  },
+  {
+    "id": "finance-cut-off",
+    "term": "cut-off",
+    "partOfSpeech": "noun",
+    "pronunciation": "KUT-off",
+    "meaning": "The agreed boundary or time used to decide which items belong in a reporting period or submission.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:month-end-close"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "align"
+    ],
+    "collocations": [
+      "reporting cut-off",
+      "cut-off date",
+      "cut-off time"
+    ],
+    "example": "Please confirm the reporting cut-off before sending the final list of June deliveries.",
+    "whenToUse": "Use it when a deadline or period boundary affects the completeness and timing of a report.",
+    "avoidOrMisuse": "A submission deadline and an accounting period boundary may differ; state which cut-off you mean.",
+    "mission": "Write a message asking a colleague to confirm the cut-off relevant to a fictional report."
+  },
+  {
+    "id": "finance-allocate",
+    "term": "allocate",
+    "partOfSpeech": "verb",
+    "pronunciation": "AL-uh-kayt",
+    "meaning": "To assign an amount, resource, or share to a particular purpose, team, or category.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:month-end-close",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "align"
+    ],
+    "collocations": [
+      "allocate costs",
+      "allocate resources",
+      "allocate an amount to"
+    ],
+    "example": "We will allocate the shared training cost using the department split already agreed with the team.",
+    "whenToUse": "Use it when explaining where a cost or resource is assigned and the basis for that assignment.",
+    "avoidOrMisuse": "Allocating a cost is not the same as paying it; explain the assignment basis rather than implying a cash movement.",
+    "mission": "Explain how you would allocate a fictional shared cost using a stated, agreed basis."
+  },
+  {
+    "id": "finance-consolidate",
+    "term": "consolidate",
+    "partOfSpeech": "verb",
+    "pronunciation": "kuhn-SOL-ih-dayt",
+    "meaning": "To combine separate inputs into a single organised view or report.",
+    "difficulty": "upper-b2",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:month-end-close",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "align"
+    ],
+    "collocations": [
+      "consolidate the reports",
+      "consolidate department inputs",
+      "consolidate the results"
+    ],
+    "example": "I will consolidate the branch updates into one close-status report for the controller.",
+    "whenToUse": "Use it to explain that several inputs will be brought together in a coherent view.",
+    "avoidOrMisuse": "In formal group accounting, consolidation has a specific technical meaning; describe the actual process rather than implying that combining spreadsheets completes it.",
+    "mission": "Say which three inputs you will consolidate and who will use the combined report."
+  },
+  {
+    "id": "finance-adjustment",
+    "term": "adjustment",
+    "partOfSpeech": "noun",
+    "pronunciation": "uh-JUST-muhnt",
+    "meaning": "A change made to a figure, entry, or plan to reflect additional information or correct a problem.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:month-end-close",
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "make an adjustment",
+      "proposed adjustment",
+      "explain the adjustment"
+    ],
+    "example": "The adjustment removes a duplicated travel line from the department's draft report.",
+    "whenToUse": "Use it when explaining what changed, why it changed, and whether approval is still needed.",
+    "avoidOrMisuse": "Do not call an unexplained difference an adjustment; identify the actual change and its reason.",
+    "mission": "Describe a fictional report adjustment and explain the before-and-after effect."
+  },
+  {
+    "id": "finance-completeness",
+    "term": "completeness",
+    "partOfSpeech": "noun",
+    "pronunciation": "kuhm-PLEET-nuhs",
+    "meaning": "The extent to which all the information or items required for a defined purpose are included.",
+    "difficulty": "c1",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:month-end-close",
+      "finance:audit-discussion"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "check completeness",
+      "completeness of the records",
+      "completeness check"
+    ],
+    "example": "Our completeness check compares the submitted files with the agreed list of department reports.",
+    "whenToUse": "Use it when the question is whether required information is missing.",
+    "avoidOrMisuse": "Completeness does not establish accuracy; a report can include every required item and still contain wrong figures.",
+    "mission": "Describe how you would check the completeness of a fictional close submission."
+  },
+  {
+    "id": "finance-provisional",
+    "term": "provisional",
+    "partOfSpeech": "adjective",
+    "pronunciation": "pruh-VIZH-uh-nuhl",
+    "meaning": "Available for use for now but still subject to confirmation or change.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:month-end-close",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "provisional figure",
+      "provisional estimate",
+      "provisional approval"
+    ],
+    "example": "The £18,000 estimate is provisional until the supplier confirms the remaining work.",
+    "whenToUse": "Use it to share useful working information while signalling what still needs confirmation.",
+    "avoidOrMisuse": "Provisional does not mean careless; state the reason it may change and what will resolve the uncertainty.",
+    "mission": "Present a provisional figure and name the information needed to confirm it."
+  },
+  {
+    "id": "finance-finalise",
+    "term": "finalise",
+    "partOfSpeech": "verb",
+    "pronunciation": "FY-nuh-lize",
+    "meaning": "To complete the remaining changes or checks so that a document or arrangement is ready for its intended use.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:month-end-close",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "align",
+      "clarify"
+    ],
+    "collocations": [
+      "finalise the report",
+      "finalise the figures",
+      "finalise the arrangements"
+    ],
+    "example": "We can finalise the report once the two department owners confirm their updates.",
+    "whenToUse": "Use it to explain the last steps before a report or agreement is considered complete.",
+    "avoidOrMisuse": "Finalising a document does not necessarily mean it has been formally approved; keep completion and approval distinct.",
+    "mission": "Say what must happen before you can finalise a fictional finance report."
+  },
+  {
+    "id": "finance-sign-off",
+    "term": "sign-off",
+    "partOfSpeech": "noun",
+    "pronunciation": "SYNE-off",
+    "meaning": "Formal confirmation that the appropriate person has reviewed and approved a specified item.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:month-end-close",
+      "finance:audit-discussion"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "align",
+      "reassure"
+    ],
+    "collocations": [
+      "request sign-off",
+      "final sign-off",
+      "sign-off from finance"
+    ],
+    "example": "The pack is ready for sign-off from the controller after the remaining query is answered.",
+    "whenToUse": "Use it when approval must be distinguished from preparation or informal agreement.",
+    "avoidOrMisuse": "Do not imply that sign-off covers work outside the stated review; identify the item and the authorised reviewer.",
+    "mission": "Request sign-off for a fictional report and state exactly what the reviewer is approving."
+  },
+  {
+    "id": "finance-traceable",
+    "term": "traceable",
+    "partOfSpeech": "adjective",
+    "pronunciation": "TRAY-suh-buhl",
+    "meaning": "Able to be followed back to its source or through the steps that produced it.",
+    "difficulty": "upper-b2",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:month-end-close",
+      "finance:audit-discussion"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "traceable to the source",
+      "fully traceable",
+      "traceable record"
+    ],
+    "example": "Each total in the summary is traceable to a dated department file and a calculation tab.",
+    "whenToUse": "Use it when another person needs to understand where a figure came from or how it changed.",
+    "avoidOrMisuse": "A traceable figure is not automatically correct; traceability makes the source and process easier to check.",
+    "mission": "Explain how a fictional report total is traceable to its supporting information."
+  },
+  {
+    "id": "finance-consistent",
+    "term": "consistent",
+    "partOfSpeech": "adjective",
+    "pronunciation": "kuhn-SIS-tuhnt",
+    "meaning": "Following the same stated approach or remaining in agreement across comparable items.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:month-end-close",
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "align"
+    ],
+    "collocations": [
+      "consistent approach",
+      "consistent with the report",
+      "consistent definitions"
+    ],
+    "example": "Please use consistent department names so readers can compare the monthly reports.",
+    "whenToUse": "Use it when comparable reports need a shared definition, format, or treatment.",
+    "avoidOrMisuse": "Consistency alone does not show that an approach is appropriate; explain any necessary change rather than preserving a known problem.",
+    "mission": "Ask a colleague to use a consistent definition and explain why the comparison needs it."
+  },
+  {
+    "id": "finance-handover",
+    "term": "handover",
+    "partOfSpeech": "noun",
+    "pronunciation": "HAND-oh-vuh",
+    "meaning": "The transfer of work, information, and responsibility from one person or team to another.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:month-end-close"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "align",
+      "reassure"
+    ],
+    "collocations": [
+      "close handover",
+      "handover note",
+      "complete the handover"
+    ],
+    "example": "The handover note lists the open queries, their owners, and the links to supporting files.",
+    "whenToUse": "Use it when a colleague must continue your work without guessing what remains to be done.",
+    "avoidOrMisuse": "Sending a folder is not a complete handover if the recipient cannot identify the status, owner, and next action.",
+    "mission": "Write a handover sentence that names one open item, its status, and its next owner."
+  },
+  {
+    "id": "finance-driver",
+    "term": "driver",
+    "partOfSpeech": "noun",
+    "pronunciation": "DRY-vuh",
+    "meaning": "A factor that causes or substantially influences a result or change.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:variance-review",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "recommend"
+    ],
+    "collocations": [
+      "main driver",
+      "cost driver",
+      "driver of growth"
+    ],
+    "example": "Higher shipment volumes were the main driver of the increase in packaging costs.",
+    "whenToUse": "Use it to connect a reported movement to the factor that explains it.",
+    "avoidOrMisuse": "A movement in another figure is not automatically a driver; show the relationship rather than assuming causation.",
+    "mission": "Identify the main driver of a fictional cost increase and name supporting information."
+  },
+  {
+    "id": "finance-attributable",
+    "term": "attributable",
+    "partOfSpeech": "adjective",
+    "pronunciation": "uh-TRIB-yuh-tuh-buhl",
+    "meaning": "Able to be explained as resulting from a particular cause or source.",
+    "difficulty": "c1",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "attributable to timing",
+      "directly attributable to",
+      "partly attributable to"
+    ],
+    "example": "About £6,000 of the increase is attributable to the extra customer event confirmed in the schedule.",
+    "whenToUse": "Use it to state the part of a result that a supported cause explains.",
+    "avoidOrMisuse": "Use attributable to, not attributable for, and avoid claiming a cause is proven when it is only suspected.",
+    "mission": "Explain how much of a fictional variance is attributable to a documented event."
+  },
+  {
+    "id": "finance-recurring",
+    "term": "recurring",
+    "partOfSpeech": "adjective",
+    "pronunciation": "rih-KUR-ing",
+    "meaning": "Happening repeatedly or expected to return at intervals.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:variance-review",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "recommend"
+    ],
+    "collocations": [
+      "recurring cost",
+      "recurring revenue",
+      "recurring issue"
+    ],
+    "example": "The new monthly support fee is a recurring cost in the team's operating plan.",
+    "whenToUse": "Use it when repetition affects the explanation or the expected future result.",
+    "avoidOrMisuse": "Recurring does not mean guaranteed or permanent; state the period and any known end date.",
+    "mission": "Identify a recurring cost and explain its effect on the next forecast."
+  },
+  {
+    "id": "finance-exceptional",
+    "term": "exceptional",
+    "partOfSpeech": "adjective",
+    "pronunciation": "ik-SEP-shuh-nuhl",
+    "meaning": "Unusual compared with the normal pattern being discussed.",
+    "difficulty": "upper-b2",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "exceptional event",
+      "exceptional circumstances",
+      "exceptional increase"
+    ],
+    "example": "The office relocation was an exceptional event in the department's monthly spending pattern.",
+    "whenToUse": "Use it to explain why a specific event differs from ordinary activity.",
+    "avoidOrMisuse": "Calling an event exceptional in conversation does not establish a formal accounting classification or mean it can be ignored.",
+    "mission": "Describe an exceptional event and explain why it differs from normal activity."
+  },
+  {
+    "id": "finance-offset",
+    "term": "offset",
+    "partOfSpeech": "noun",
+    "pronunciation": "OFF-set",
+    "meaning": "An amount or effect that partly or fully balances an opposite amount or effect.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:variance-review",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "partial offset",
+      "provide an offset",
+      "offset to the increase"
+    ],
+    "example": "Lower travel spending provides a partial offset to the higher training cost.",
+    "whenToUse": "Use it to explain opposing movements before stating their combined effect.",
+    "avoidOrMisuse": "An offset may be only partial; state the amounts rather than implying that the whole impact disappears.",
+    "mission": "Describe an offset between two fictional cost movements and state the net change."
+  },
+  {
+    "id": "finance-comparable",
+    "term": "comparable",
+    "partOfSpeech": "adjective",
+    "pronunciation": "KOM-puh-ruh-buhl",
+    "meaning": "Similar enough in relevant definitions and circumstances to support a useful comparison.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "challenge-diplomatically"
+    ],
+    "collocations": [
+      "comparable figures",
+      "comparable period",
+      "directly comparable"
+    ],
+    "example": "The two branches are not directly comparable because one handles substantially more complex orders.",
+    "whenToUse": "Use it before interpreting differences between periods, teams, or external reference points.",
+    "avoidOrMisuse": "Comparable does not mean identical; identify the important differences that remain.",
+    "mission": "Explain whether two fictional teams' costs are comparable and give one reason."
+  },
+  {
+    "id": "finance-underlying",
+    "term": "underlying",
+    "partOfSpeech": "adjective",
+    "pronunciation": "un-duh-LY-ing",
+    "meaning": "Describing the more basic condition or pattern beneath a visible result.",
+    "difficulty": "c1",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:variance-review",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "clarify",
+      "recommend"
+    ],
+    "collocations": [
+      "underlying trend",
+      "underlying cause",
+      "underlying performance"
+    ],
+    "example": "After separating the delivery-date shift, the underlying demand trend appears stable.",
+    "whenToUse": "Use it when looking beyond a temporary or surface movement to a supported broader pattern.",
+    "avoidOrMisuse": "Explain what you have separated or adjusted; underlying is not permission to remove inconvenient results.",
+    "mission": "Describe an underlying trend and distinguish it from one temporary effect."
+  },
+  {
+    "id": "finance-quantify",
+    "term": "quantify",
+    "partOfSpeech": "verb",
+    "pronunciation": "KWON-tih-fy",
+    "meaning": "To express the size or extent of something in numbers.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:variance-review",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "recommend"
+    ],
+    "collocations": [
+      "quantify the impact",
+      "quantify the difference",
+      "quantify the benefit"
+    ],
+    "example": "Please quantify the impact of the delayed shipment on next month's expected receipts.",
+    "whenToUse": "Use it when a qualitative statement needs an amount, percentage, count, or defined range.",
+    "avoidOrMisuse": "Numbers are not automatically precise; state the units, period, and uncertainty behind an estimate.",
+    "mission": "Ask a colleague to quantify a fictional delay's impact, specifying the period and units."
+  },
+  {
+    "id": "finance-proportionate",
+    "term": "proportionate",
+    "partOfSpeech": "adjective",
+    "pronunciation": "pruh-PAW-shuh-nuht",
+    "meaning": "Appropriate in scale to the size, significance, or risk of the issue.",
+    "difficulty": "c1",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:variance-review",
+      "finance:audit-discussion"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "recommend",
+      "challenge-diplomatically"
+    ],
+    "collocations": [
+      "proportionate response",
+      "proportionate review",
+      "proportionate to the risk"
+    ],
+    "example": "A targeted review of the affected invoices would be proportionate to the issue identified.",
+    "whenToUse": "Use it when explaining why a proposed response has the right scale for the problem.",
+    "avoidOrMisuse": "Proportionate does not simply mean smaller or cheaper; connect the response to the issue's significance.",
+    "mission": "Recommend a proportionate response to a fictional reporting query and explain the scale."
+  },
+  {
+    "id": "finance-favourable",
+    "term": "favourable",
+    "partOfSpeech": "adjective",
+    "pronunciation": "FAY-vuh-ruh-buhl",
+    "meaning": "Better than the stated comparison or beneficial from the specified point of view.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "favourable movement",
+      "favourable result",
+      "favourable cost variance"
+    ],
+    "example": "The cost movement is favourable against plan, although part of it reflects work delayed until next month.",
+    "whenToUse": "Use it when describing a result relative to a clearly identified objective or comparison.",
+    "avoidOrMisuse": "Lower spending is not always good overall; mention delayed work, reduced output, or other relevant consequences.",
+    "mission": "Explain a favourable cost movement and one qualification that a manager should understand."
+  },
+  {
+    "id": "finance-adverse",
+    "term": "adverse",
+    "partOfSpeech": "adjective",
+    "pronunciation": "AD-vurs",
+    "meaning": "Unhelpful, harmful, or worse than the stated comparison.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:variance-review",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "recommend"
+    ],
+    "collocations": [
+      "adverse movement",
+      "adverse impact",
+      "adverse variance"
+    ],
+    "example": "The adverse revenue movement against plan is mainly explained by a later delivery date.",
+    "whenToUse": "Use it to state a negative direction calmly before explaining the cause and response.",
+    "avoidOrMisuse": "Adverse describes an effect or comparison, not a person's motives; do not use it as a substitute for evidence.",
+    "mission": "Describe an adverse movement and separate its cause from the proposed response."
+  },
+  {
+    "id": "finance-commentary",
+    "term": "commentary",
+    "partOfSpeech": "noun",
+    "pronunciation": "KOM-uhn-tuh-ree",
+    "meaning": "An explanation that helps a reader interpret figures, events, or results.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:variance-review",
+      "finance:month-end-close"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "recommend"
+    ],
+    "collocations": [
+      "variance commentary",
+      "management commentary",
+      "supporting commentary"
+    ],
+    "example": "The variance commentary explains the timing change rather than simply repeating the table.",
+    "whenToUse": "Use it for the written explanation accompanying a report or presentation of numbers.",
+    "avoidOrMisuse": "Commentary should add causes, implications, or qualifications; restating every figure does not explain the result.",
+    "mission": "Write two sentences of commentary explaining a fictional result and its main implication."
+  },
+  {
+    "id": "finance-assumption",
+    "term": "assumption",
+    "partOfSpeech": "noun",
+    "pronunciation": "uh-SUMP-shuhn",
+    "meaning": "Something treated as true for the purpose of planning or analysis, although it may need confirmation.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:audit-discussion"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "challenge-diplomatically"
+    ],
+    "collocations": [
+      "planning assumption",
+      "key assumption",
+      "test an assumption"
+    ],
+    "example": "Our forecast uses the assumption that the supplier can deliver the equipment in November.",
+    "whenToUse": "Use it to make the conditions behind an estimate or recommendation visible.",
+    "avoidOrMisuse": "An assumption is not a confirmed fact; explain its basis and what would cause you to revisit it.",
+    "mission": "State one assumption behind a fictional forecast and how you would check it."
+  },
+  {
+    "id": "finance-baseline",
+    "term": "baseline",
+    "partOfSpeech": "noun",
+    "pronunciation": "BAYS-lyne",
+    "meaning": "An agreed starting position used as a reference for measuring change.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "align"
+    ],
+    "collocations": [
+      "agreed baseline",
+      "baseline forecast",
+      "compare against the baseline"
+    ],
+    "example": "The approved March plan remains the baseline for explaining subsequent changes.",
+    "whenToUse": "Use it when readers need to know the exact starting point behind a comparison.",
+    "avoidOrMisuse": "Do not silently change the baseline between comparisons; name its date and version.",
+    "mission": "Identify the baseline for a fictional comparison and explain why its version matters."
+  },
+  {
+    "id": "finance-forecast",
+    "term": "forecast",
+    "partOfSpeech": "noun",
+    "pronunciation": "FAW-kahst",
+    "meaning": "An estimate of a future result based on current information and stated assumptions.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "clarify",
+      "recommend"
+    ],
+    "collocations": [
+      "updated forecast",
+      "cash forecast",
+      "revise the forecast"
+    ],
+    "example": "The updated forecast reflects the delivery dates confirmed by the operations team this week.",
+    "whenToUse": "Use it when communicating the expected future position and why that expectation changed.",
+    "avoidOrMisuse": "A forecast is neither a guaranteed outcome nor automatically the same as a target or approved budget.",
+    "mission": "Present a fictional forecast update and name the new information behind it."
+  },
+  {
+    "id": "finance-seasonal",
+    "term": "seasonal",
+    "partOfSpeech": "adjective",
+    "pronunciation": "SEE-zuh-nuhl",
+    "meaning": "Related to a pattern that tends to recur at particular times of the year.",
+    "difficulty": "upper-b2",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "seasonal pattern",
+      "seasonal demand",
+      "seasonal peak"
+    ],
+    "example": "The team expects a seasonal peak in support requests during the summer registration period.",
+    "whenToUse": "Use it when a recurring annual pattern helps explain the timing or size of activity.",
+    "avoidOrMisuse": "A single rise in summer does not establish a seasonal pattern; explain the evidence for repetition.",
+    "mission": "Describe a seasonal pattern and how it changes the interpretation of a monthly result."
+  },
+  {
+    "id": "finance-trajectory",
+    "term": "trajectory",
+    "partOfSpeech": "noun",
+    "pronunciation": "truh-JEK-tuh-ree",
+    "meaning": "The direction and pattern in which a measure develops over time.",
+    "difficulty": "c1",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader",
+      "executive"
+    ],
+    "goals": [
+      "clarify",
+      "influence"
+    ],
+    "collocations": [
+      "cost trajectory",
+      "growth trajectory",
+      "change the trajectory"
+    ],
+    "example": "The cost trajectory flattens after September as the temporary project team reduces in size.",
+    "whenToUse": "Use it to discuss the direction of several periods rather than one isolated figure.",
+    "avoidOrMisuse": "A trajectory is not a promise; explain whether it is observed, expected, or a target.",
+    "mission": "Describe a fictional cost trajectory and identify what could change its direction."
+  },
+  {
+    "id": "finance-sensitivity",
+    "term": "sensitivity",
+    "partOfSpeech": "noun",
+    "pronunciation": "sen-sih-TIV-ih-tee",
+    "meaning": "The degree to which a result changes when an input or assumption changes.",
+    "difficulty": "c1",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "clarify",
+      "recommend"
+    ],
+    "collocations": [
+      "sensitivity analysis",
+      "sensitivity to timing",
+      "test the sensitivity"
+    ],
+    "example": "We will test the sensitivity of expected receipts to a one-week change in delivery timing.",
+    "whenToUse": "Use it when explaining which assumptions have a large or small effect on a projection.",
+    "avoidOrMisuse": "Sensitivity describes how results respond; it does not tell you how likely the changed assumption is.",
+    "mission": "Explain which input you would vary to test the sensitivity of a fictional forecast."
+  },
+  {
+    "id": "finance-scenario",
+    "term": "scenario",
+    "partOfSpeech": "noun",
+    "pronunciation": "sih-NAH-ree-oh",
+    "meaning": "A defined set of possible conditions used to explore what could happen.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "clarify",
+      "recommend"
+    ],
+    "collocations": [
+      "planning scenario",
+      "downside scenario",
+      "compare scenarios"
+    ],
+    "example": "In the later-delivery scenario, part of the expected cash receipt moves into December.",
+    "whenToUse": "Use it to compare plausible combinations of conditions before selecting an action.",
+    "avoidOrMisuse": "A scenario is not automatically a forecast or a probability statement; specify the conditions it assumes.",
+    "mission": "Describe one fictional scenario and the assumption that distinguishes it from the base case."
+  },
+  {
+    "id": "finance-range",
+    "term": "range",
+    "partOfSpeech": "noun",
+    "pronunciation": "RAYNJ",
+    "meaning": "The span between stated lower and upper values or possible outcomes.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "estimated range",
+      "range of outcomes",
+      "within the range"
+    ],
+    "example": "The current estimate is a range of £15,000 to £18,000, depending on the final delivery charge.",
+    "whenToUse": "Use it to show uncertainty when one exact number would suggest more precision than you have.",
+    "avoidOrMisuse": "A range is not a guarantee that the outcome cannot fall outside it; explain how its limits were chosen.",
+    "mission": "Present a fictional cost range and state the main reason the amount is uncertain."
+  },
+  {
+    "id": "finance-headroom",
+    "term": "headroom",
+    "partOfSpeech": "noun",
+    "pronunciation": "HED-room",
+    "meaning": "The remaining room before an available amount or agreed limit is used up.",
+    "difficulty": "c1",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader",
+      "executive"
+    ],
+    "goals": [
+      "clarify",
+      "recommend"
+    ],
+    "collocations": [
+      "cash headroom",
+      "budget headroom",
+      "remaining headroom"
+    ],
+    "example": "The revised cash schedule shows £9,000 of headroom above the team's chosen planning buffer.",
+    "whenToUse": "Use it to explain the remaining flexibility relative to a clearly defined resource or limit.",
+    "avoidOrMisuse": "Name the limit and period; headroom does not have a single meaning across cash, budgets, and lending arrangements.",
+    "mission": "Explain the remaining headroom in a fictional plan and state the limit used."
+  },
+  {
+    "id": "finance-timing",
+    "term": "timing",
+    "partOfSpeech": "noun",
+    "pronunciation": "TY-ming",
+    "meaning": "When something happens and how that point relates to other events or periods.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "payment timing",
+      "timing difference",
+      "timing of receipts"
+    ],
+    "example": "The timing of the customer receipt matters because the supplier payment is due a week earlier.",
+    "whenToUse": "Use it when the date of an event changes a period comparison or a cash discussion.",
+    "avoidOrMisuse": "Calling a difference timing-related should not conceal a permanent change; explain when the effect is expected to reverse.",
+    "mission": "Explain a fictional timing difference and identify the two dates that matter."
+  },
+  {
+    "id": "finance-trigger",
+    "term": "trigger",
+    "partOfSpeech": "noun",
+    "pronunciation": "TRIG-uh",
+    "meaning": "A specified event or condition that starts an agreed action or review.",
+    "difficulty": "upper-b2",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:audit-discussion"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "align",
+      "recommend"
+    ],
+    "collocations": [
+      "review trigger",
+      "trigger for action",
+      "agreed trigger"
+    ],
+    "example": "A supplier delay of more than five working days is the agreed trigger for revisiting the delivery forecast.",
+    "whenToUse": "Use it to make clear when a plan will be reviewed or a prepared action will begin.",
+    "avoidOrMisuse": "Do not invent a trigger after an event and present it as previously agreed; identify the owner and agreed condition.",
+    "mission": "Define a trigger for reviewing a fictional forecast and name who will respond."
+  },
+  {
+    "id": "finance-revise",
+    "term": "revise",
+    "partOfSpeech": "verb",
+    "pronunciation": "rih-VYZE",
+    "meaning": "To change an existing estimate, document, or plan in response to review or new information.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:month-end-close"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "align"
+    ],
+    "collocations": [
+      "revise the forecast",
+      "revise an estimate",
+      "revise the plan"
+    ],
+    "example": "We will revise the forecast after operations confirms the new delivery schedule.",
+    "whenToUse": "Use it when explaining what will change in an existing version and why.",
+    "avoidOrMisuse": "Revising a forecast is different from rewriting the original approved comparison; keep both versions identifiable.",
+    "mission": "Say when you will revise a fictional estimate and which new information will inform the change."
+  },
+  {
+    "id": "finance-evidence",
+    "term": "evidence",
+    "partOfSpeech": "noun",
+    "pronunciation": "EV-ih-duhns",
+    "meaning": "Information or records used to support or assess a statement or conclusion.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:audit-discussion",
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "supporting evidence",
+      "documentary evidence",
+      "review the evidence"
+    ],
+    "example": "The dated completion note is supporting evidence for the service date stated in the report.",
+    "whenToUse": "Use it when explaining the basis for a statement rather than asking a reader to accept it without support.",
+    "avoidOrMisuse": "Evidence is usually uncountable: say two pieces of evidence, not two evidences. Consider relevance and reliability as well as quantity.",
+    "mission": "Name the evidence supporting a fictional report statement and one limitation of that evidence."
+  },
+  {
+    "id": "finance-corroborate",
+    "term": "corroborate",
+    "partOfSpeech": "verb",
+    "pronunciation": "kuh-ROB-uh-rayt",
+    "meaning": "To provide additional support for a statement through another relevant source or observation.",
+    "difficulty": "c1",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:audit-discussion"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "corroborate the explanation",
+      "corroborate the account",
+      "evidence to corroborate"
+    ],
+    "example": "The customer's acknowledgement helps corroborate the service date shown in the completion record.",
+    "whenToUse": "Use it when a second source strengthens an explanation or statement.",
+    "avoidOrMisuse": "Two copies of the same unsupported statement do not provide independent corroboration; identify the additional source.",
+    "mission": "Suggest a second source that could corroborate a fictional explanation."
+  },
+  {
+    "id": "finance-validate",
+    "term": "validate",
+    "partOfSpeech": "verb",
+    "pronunciation": "VAL-ih-dayt",
+    "meaning": "To check that information, a method, or an assumption is suitable and meets the intended requirements.",
+    "difficulty": "upper-b2",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:audit-discussion",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "validate the assumptions",
+      "validate the data",
+      "validate the approach"
+    ],
+    "example": "We will validate the report's assumptions against the delivery information confirmed by operations.",
+    "whenToUse": "Use it when checking whether an input or approach is fit for a defined purpose.",
+    "avoidOrMisuse": "Do not use validated to mean merely received or glanced at; explain what requirements were checked.",
+    "mission": "Explain how you would validate one assumption in a fictional forecast."
+  },
+  {
+    "id": "finance-exception",
+    "term": "exception",
+    "partOfSpeech": "noun",
+    "pronunciation": "ik-SEP-shuhn",
+    "meaning": "An item or result that falls outside a stated rule, expected pattern, or agreed condition.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:audit-discussion",
+      "finance:month-end-close"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "align"
+    ],
+    "collocations": [
+      "exception report",
+      "review an exception",
+      "record an exception"
+    ],
+    "example": "The comparison produced one exception because a department used a different reporting date.",
+    "whenToUse": "Use it to identify a result needing attention under a defined check or process.",
+    "avoidOrMisuse": "An exception is not automatically an error or misconduct; explain the rule and investigate the reason.",
+    "mission": "Describe an exception in a fictional report and state who will review it."
+  },
+  {
+    "id": "finance-threshold",
+    "term": "threshold",
+    "partOfSpeech": "noun",
+    "pronunciation": "THRESH-hohld",
+    "meaning": "A specified level or boundary at which a different action or assessment begins.",
+    "difficulty": "upper-b2",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:audit-discussion",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "clarify",
+      "align"
+    ],
+    "collocations": [
+      "agreed threshold",
+      "review threshold",
+      "exceed the threshold"
+    ],
+    "example": "The team agreed a £100 threshold for flagging differences in this internal comparison exercise.",
+    "whenToUse": "Use it to explain the boundary that determines how a result will be handled.",
+    "avoidOrMisuse": "A threshold belongs to a specified process; do not present an illustrative or internal value as a universal requirement.",
+    "mission": "Describe a fictional review threshold and the action taken when it is exceeded."
+  },
+  {
+    "id": "finance-accountability",
+    "term": "accountability",
+    "partOfSpeech": "noun",
+    "pronunciation": "uh-kown-tuh-BIL-ih-tee",
+    "meaning": "The obligation to explain and take responsibility for an outcome or decision.",
+    "difficulty": "c1",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:audit-discussion",
+      "finance:month-end-close"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "align",
+      "coach"
+    ],
+    "collocations": [
+      "clear accountability",
+      "accountability for completion",
+      "assign accountability"
+    ],
+    "example": "The team lead retains accountability for the close checklist even when individual checks are delegated.",
+    "whenToUse": "Use it to clarify who must explain whether an agreed outcome was achieved.",
+    "avoidOrMisuse": "Accountability is not simply blame after a failure; make expectations and authority clear beforehand.",
+    "mission": "State who has accountability for a fictional reporting outcome and what they must confirm."
+  },
+  {
+    "id": "finance-oversight",
+    "term": "oversight",
+    "partOfSpeech": "noun",
+    "pronunciation": "OH-vuh-syte",
+    "meaning": "Supervision or review of an activity to check that it is being carried out appropriately.",
+    "difficulty": "c1",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:audit-discussion",
+      "finance:month-end-close"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader",
+      "executive"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "management oversight",
+      "provide oversight",
+      "oversight of the process"
+    ],
+    "example": "The controller provides oversight of the close process through a weekly review of open items.",
+    "whenToUse": "Use it to explain how work is supervised without implying that the supervisor performs every task.",
+    "avoidOrMisuse": "Oversight can also mean an accidental omission. Use provide oversight for supervision and an oversight for a missed item.",
+    "mission": "Explain who provides oversight of a fictional process and what they review."
+  },
+  {
+    "id": "finance-authorise",
+    "term": "authorise",
+    "partOfSpeech": "verb",
+    "pronunciation": "AW-thuh-rize",
+    "meaning": "To give the required permission for an action to proceed.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:audit-discussion",
+      "finance:month-end-close"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "align",
+      "reassure"
+    ],
+    "collocations": [
+      "authorise a payment",
+      "authorise a change",
+      "authorise the release"
+    ],
+    "example": "Only the designated manager can authorise the change under the team's approved process.",
+    "whenToUse": "Use it when formal permission is distinct from preparing, recommending, or checking an action.",
+    "avoidOrMisuse": "Do not imply that any manager can authorise any action; refer to the authority defined for the specific process.",
+    "mission": "Ask who can authorise a fictional report change and what information they need."
+  },
+  {
+    "id": "finance-document",
+    "term": "document",
+    "partOfSpeech": "verb",
+    "pronunciation": "DOK-yuh-ment",
+    "meaning": "To record information clearly so that another person can understand and review it later.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:audit-discussion",
+      "finance:month-end-close"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "align"
+    ],
+    "collocations": [
+      "document the decision",
+      "document the process",
+      "document the rationale"
+    ],
+    "example": "Please document the reason for the change and link the reviewer's response in the working file.",
+    "whenToUse": "Use it when a decision, explanation, or process needs a clear and retrievable record.",
+    "avoidOrMisuse": "Recording a decision does not prove it was correct or approved; distinguish the record from the judgement it describes.",
+    "mission": "Say what you will document after a fictional review meeting and where the record will be kept."
+  },
+  {
+    "id": "finance-verify",
+    "term": "verify",
+    "partOfSpeech": "verb",
+    "pronunciation": "VER-ih-fy",
+    "meaning": "To check whether a particular fact or detail agrees with reliable supporting information.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:audit-discussion",
+      "finance:month-end-close"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "verify the amount",
+      "verify the date",
+      "verify against the source"
+    ],
+    "example": "We will verify the delivery date against the signed receipt before updating the note.",
+    "whenToUse": "Use it for checking a specified fact, amount, date, or record.",
+    "avoidOrMisuse": "Verifying one detail does not validate every assumption or the whole report; state exactly what you checked.",
+    "mission": "Explain how you would verify one date or amount in a fictional report."
+  },
+  {
+    "id": "finance-remediate",
+    "term": "remediate",
+    "partOfSpeech": "verb",
+    "pronunciation": "rih-MEE-dee-ayt",
+    "meaning": "To take corrective action to address a problem or weakness.",
+    "difficulty": "c1",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:audit-discussion"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "recommend",
+      "reassure"
+    ],
+    "collocations": [
+      "remediate the weakness",
+      "remediate the issue",
+      "steps to remediate"
+    ],
+    "example": "The team will remediate the filing weakness by assigning an owner and checking each completed handover.",
+    "whenToUse": "Use it when discussing a corrective plan in a review or control discussion.",
+    "avoidOrMisuse": "A promise to remediate is not evidence that the problem is fixed; describe the action and how completion will be checked.",
+    "mission": "Propose an action to remediate a fictional process weakness and a way to check the result."
+  },
+  {
+    "id": "finance-transparent",
+    "term": "transparent",
+    "partOfSpeech": "adjective",
+    "pronunciation": "trans-PAIR-uhnt",
+    "meaning": "Open and clear about the relevant facts, reasoning, and limitations.",
+    "difficulty": "upper-b2",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:audit-discussion",
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "reassure",
+      "clarify"
+    ],
+    "collocations": [
+      "transparent explanation",
+      "transparent process",
+      "transparent about the limitations"
+    ],
+    "example": "The update is transparent about the missing confirmation and the checks already completed.",
+    "whenToUse": "Use it when clear disclosure of the relevant position helps readers understand and assess your work.",
+    "avoidOrMisuse": "Transparent communication does not require sharing confidential information with an inappropriate audience.",
+    "mission": "Write a transparent update that names both a completed check and a remaining limitation."
+  },
+  {
+    "id": "finance-assurance",
+    "term": "assurance",
+    "partOfSpeech": "noun",
+    "pronunciation": "uh-SHAW-ruhns",
+    "meaning": "Confidence about a specified matter that is supported by relevant information or checks.",
+    "difficulty": "c1",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:audit-discussion"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader",
+      "executive"
+    ],
+    "goals": [
+      "reassure",
+      "clarify"
+    ],
+    "collocations": [
+      "provide assurance",
+      "additional assurance",
+      "assurance about the process"
+    ],
+    "example": "The reconciliation gives the team additional assurance about the agreement between these two reports.",
+    "whenToUse": "Use it to explain what a completed check gives the team confidence about.",
+    "avoidOrMisuse": "Formal assurance engagements have defined meanings; do not present an informal internal check as an external assurance conclusion.",
+    "mission": "Explain what assurance a fictional check provides and what it does not cover."
+  },
+  {
+    "id": "finance-unresolved",
+    "term": "unresolved",
+    "partOfSpeech": "adjective",
+    "pronunciation": "un-rih-ZOLVD",
+    "meaning": "Not yet settled or given a satisfactory explanation or solution.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:audit-discussion",
+      "finance:month-end-close"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "align"
+    ],
+    "collocations": [
+      "unresolved issue",
+      "remain unresolved",
+      "unresolved difference"
+    ],
+    "example": "The difference remains unresolved because the team has not yet confirmed which delivery date is correct.",
+    "whenToUse": "Use it when work has taken place but the central question still lacks a settled answer.",
+    "avoidOrMisuse": "Unresolved does not mean no one has acted; describe the work completed and the specific question that remains.",
+    "mission": "Report an unresolved issue, the checks completed, and the next question to answer."
+  },
+  {
+    "id": "finance-clarify",
+    "term": "clarify",
+    "partOfSpeech": "verb",
+    "pronunciation": "KLAR-ih-fy",
+    "meaning": "To make a point, requirement, or explanation easier to understand and less ambiguous.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "align"
+    ],
+    "collocations": [
+      "clarify the position",
+      "clarify the requirement",
+      "clarify what is needed"
+    ],
+    "example": "Let me clarify the request: we need the delivery dates, not a revised annual budget.",
+    "whenToUse": "Use it when uncertainty about meaning could lead a colleague to take the wrong action.",
+    "avoidOrMisuse": "Clarify is not a polite label for repeating the same unclear wording; identify and explain the ambiguous point.",
+    "mission": "Write a sentence that uses clarify to correct a fictional misunderstanding about a report request."
+  },
+  {
+    "id": "finance-implication",
+    "term": "implication",
+    "partOfSpeech": "noun",
+    "pronunciation": "im-plih-KAY-shuhn",
+    "meaning": "A consequence or practical meaning that follows from a fact, proposal, or decision.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader",
+      "executive"
+    ],
+    "goals": [
+      "clarify",
+      "recommend"
+    ],
+    "collocations": [
+      "financial implication",
+      "practical implication",
+      "implication for the plan"
+    ],
+    "example": "The immediate implication of the delay is that the receipts move into the following month's cash forecast.",
+    "whenToUse": "Use it to move from describing a fact to explaining why the reader should care.",
+    "avoidOrMisuse": "Separate a confirmed consequence from a possible implication; do not imply certainty when another assumption is involved.",
+    "mission": "State a fictional finding and explain one implication for the team's plan."
+  },
+  {
+    "id": "finance-rationale",
+    "term": "rationale",
+    "partOfSpeech": "noun",
+    "pronunciation": "rash-uh-NAL",
+    "meaning": "The reasoning that explains why an action, choice, or approach makes sense.",
+    "difficulty": "c1",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:audit-discussion"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "clarify",
+      "influence"
+    ],
+    "collocations": [
+      "clear rationale",
+      "rationale for the decision",
+      "explain the rationale"
+    ],
+    "example": "The rationale for delaying the workshop is to avoid the team's busiest reporting week.",
+    "whenToUse": "Use it when the reader needs the reasoning behind a recommendation or decision.",
+    "avoidOrMisuse": "A rationale is more than a preferred outcome; connect the choice to evidence, constraints, or objectives.",
+    "mission": "Explain the rationale for a fictional recommendation using one supporting fact."
+  },
+  {
+    "id": "finance-recommend",
+    "term": "recommend",
+    "partOfSpeech": "verb",
+    "pronunciation": "rek-uh-MEND",
+    "meaning": "To advise choosing an action or option because you consider it suitable.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "recommend",
+      "influence"
+    ],
+    "collocations": [
+      "recommend an approach",
+      "recommend that we",
+      "recommend a review"
+    ],
+    "example": "I recommend a short review with operations before we change the delivery assumption.",
+    "whenToUse": "Use it to make your preferred next action explicit after presenting the relevant evidence.",
+    "avoidOrMisuse": "A recommendation is not approval. Say recommend doing something or recommend that someone does it, rather than recommend someone to do it.",
+    "mission": "Recommend one action for a fictional forecast issue and give a reason."
+  },
+  {
+    "id": "finance-feasible",
+    "term": "feasible",
+    "partOfSpeech": "adjective",
+    "pronunciation": "FEE-zuh-buhl",
+    "meaning": "Possible to carry out within the relevant practical conditions and limits.",
+    "difficulty": "upper-b2",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "recommend",
+      "negotiate"
+    ],
+    "collocations": [
+      "feasible option",
+      "financially feasible",
+      "feasible within the timetable"
+    ],
+    "example": "The smaller workshop is feasible within the available budget and trainer schedule.",
+    "whenToUse": "Use it when checking whether an option can realistically be delivered.",
+    "avoidOrMisuse": "Feasible does not mean best or approved; an option can be practical but still less attractive than another.",
+    "mission": "Explain why a fictional option is feasible and identify the conditions supporting that judgement."
+  },
+  {
+    "id": "finance-constraint",
+    "term": "constraint",
+    "partOfSpeech": "noun",
+    "pronunciation": "kuhn-STRAYNT",
+    "meaning": "A condition or limit that restricts what can be done.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:month-end-close"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "negotiate"
+    ],
+    "collocations": [
+      "budget constraint",
+      "time constraint",
+      "work within the constraint"
+    ],
+    "example": "The main constraint is the two-week window available before the reporting team starts the close.",
+    "whenToUse": "Use it when a practical limit shapes the available choices.",
+    "avoidOrMisuse": "Distinguish a real constraint from a preference or an assumption that could be changed.",
+    "mission": "Name one constraint on a fictional finance task and suggest an option within it."
+  },
+  {
+    "id": "finance-challenge",
+    "term": "challenge",
+    "partOfSpeech": "verb",
+    "pronunciation": "CHAL-inj",
+    "meaning": "To question an idea, explanation, or assumption so that its basis can be examined.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:variance-review",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "challenge-diplomatically",
+      "clarify"
+    ],
+    "collocations": [
+      "challenge an assumption",
+      "challenge the explanation",
+      "constructively challenge"
+    ],
+    "example": "May I challenge the assumption that the entire cost increase is due to higher prices?",
+    "whenToUse": "Use it when a statement needs examination before the team relies on it.",
+    "avoidOrMisuse": "Challenge the reasoning, not the person's competence or motives; explain the evidence behind your question.",
+    "mission": "Politely challenge a fictional cost explanation and suggest what the team should check."
+  },
+  {
+    "id": "finance-constructive",
+    "term": "constructive",
+    "partOfSpeech": "adjective",
+    "pronunciation": "kuhn-STRUK-tiv",
+    "meaning": "Intended to improve the situation by offering useful reasoning, feedback, or a next step.",
+    "difficulty": "upper-b2",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:variance-review",
+      "finance:audit-discussion"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "challenge-diplomatically",
+      "coach"
+    ],
+    "collocations": [
+      "constructive feedback",
+      "constructive discussion",
+      "constructive alternative"
+    ],
+    "example": "A constructive discussion would compare the price and volume effects before assigning a single cause.",
+    "whenToUse": "Use it when disagreement should help the team move towards a clearer answer or better action.",
+    "avoidOrMisuse": "Calling a comment constructive does not make it so; offer specific observations and a useful way forward.",
+    "mission": "Turn a vague criticism of a fictional report into a constructive suggestion."
+  },
+  {
+    "id": "finance-alternative",
+    "term": "alternative",
+    "partOfSpeech": "noun",
+    "pronunciation": "awl-TUR-nuh-tiv",
+    "meaning": "Another option or explanation that could be considered instead of the current one.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:variance-review",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "recommend",
+      "negotiate"
+    ],
+    "collocations": [
+      "practical alternative",
+      "consider an alternative",
+      "alternative to the proposal"
+    ],
+    "example": "A practical alternative is to phase the training across two months rather than cancel it.",
+    "whenToUse": "Use it when the team needs another route or explanation before deciding.",
+    "avoidOrMisuse": "An alternative is not automatically equivalent; state how its cost, timing, or effect differs.",
+    "mission": "Suggest an alternative to a fictional proposal and explain one important difference."
+  },
+  {
+    "id": "finance-align",
+    "term": "align",
+    "partOfSpeech": "verb",
+    "pronunciation": "uh-LYNE",
+    "meaning": "To bring understanding, plans, or actions into agreement around a shared position.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:month-end-close",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "align",
+      "negotiate"
+    ],
+    "collocations": [
+      "align on the next steps",
+      "align the assumptions",
+      "align with the plan"
+    ],
+    "example": "Let us align on the delivery assumptions before finance and operations send their updates.",
+    "whenToUse": "Use it when different teams need a shared understanding or compatible plan.",
+    "avoidOrMisuse": "Alignment is not implied by silence; state what agreement is needed and invite confirmation.",
+    "mission": "Ask two fictional teams to align on a specific assumption and confirm the agreed position."
+  },
+  {
+    "id": "finance-commitment",
+    "term": "commitment",
+    "partOfSpeech": "noun",
+    "pronunciation": "kuh-MIT-muhnt",
+    "meaning": "A clear promise or agreement to carry out an action or provide a resource.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:month-end-close",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "align",
+      "negotiate"
+    ],
+    "collocations": [
+      "clear commitment",
+      "commitment to deliver",
+      "confirm the commitment"
+    ],
+    "example": "The team confirmed its commitment to send the updated schedule by Thursday afternoon.",
+    "whenToUse": "Use it when an agreed action needs an explicit promise, owner, or delivery time.",
+    "avoidOrMisuse": "Do not turn a tentative intention into a commitment without confirmation; formal financial commitments may also require specific approval.",
+    "mission": "Request a clear commitment for a fictional close action, including who and when."
+  },
+  {
+    "id": "finance-ownership",
+    "term": "ownership",
+    "partOfSpeech": "noun",
+    "pronunciation": "OH-nuh-ship",
+    "meaning": "Responsibility for taking an action forward and ensuring it reaches an agreed outcome.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:month-end-close",
+      "finance:audit-discussion"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "align",
+      "coach"
+    ],
+    "collocations": [
+      "take ownership",
+      "clear ownership",
+      "ownership of the action"
+    ],
+    "example": "Leah will take ownership of the missing confirmation and update the team each morning.",
+    "whenToUse": "Use it when a task needs one identifiable person to follow it through.",
+    "avoidOrMisuse": "Here ownership means responsibility for work, not legal ownership of an asset or shares; specify the action.",
+    "mission": "Assign ownership of a fictional outstanding item and state the expected update."
+  },
+  {
+    "id": "finance-concise",
+    "term": "concise",
+    "partOfSpeech": "adjective",
+    "pronunciation": "kuhn-SYSE",
+    "meaning": "Expressing the necessary meaning clearly in relatively few words.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "clarify",
+      "influence"
+    ],
+    "collocations": [
+      "concise explanation",
+      "concise update",
+      "keep it concise"
+    ],
+    "example": "Please send a concise update with the result, its cause, and the decision needed.",
+    "whenToUse": "Use it when a reader needs a short message that still contains the essential information.",
+    "avoidOrMisuse": "Concise does not mean leaving out a crucial limitation, comparison, or next action.",
+    "mission": "Write a concise two-sentence update with a finding and a next step."
+  },
+  {
+    "id": "finance-caveat",
+    "term": "caveat",
+    "partOfSpeech": "noun",
+    "pronunciation": "KAV-ee-at",
+    "meaning": "A qualification or caution that limits how a statement or conclusion should be understood.",
+    "difficulty": "c1",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader",
+      "executive"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "important caveat",
+      "with one caveat",
+      "subject to a caveat"
+    ],
+    "example": "The estimate supports a provisional choice, with one caveat: the supplier price is not yet confirmed.",
+    "whenToUse": "Use it when a limitation could change the reader's interpretation or decision.",
+    "avoidOrMisuse": "Do not bury a major uncertainty in a vague caveat; explain its practical effect near the claim it qualifies.",
+    "mission": "Add a clear caveat to a fictional recommendation and explain why it matters."
+  },
+  {
+    "id": "finance-decision-ready",
+    "term": "decision-ready",
+    "partOfSpeech": "adjective",
+    "pronunciation": "dih-SIZH-uhn RED-ee",
+    "meaning": "Prepared with enough relevant information and a clear choice for someone to make the specified decision.",
+    "difficulty": "c1",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader",
+      "executive"
+    ],
+    "goals": [
+      "recommend",
+      "influence"
+    ],
+    "collocations": [
+      "decision-ready report",
+      "decision-ready analysis",
+      "make the proposal decision-ready"
+    ],
+    "example": "The proposal is decision-ready for an initial option choice, with the remaining supplier assumptions clearly marked.",
+    "whenToUse": "Use it when the evidence, options, limitations, and requested decision are sufficiently clear for the intended stage.",
+    "avoidOrMisuse": "Decision-ready does not mean risk-free, fully certain, or already approved; name the decision the material supports.",
+    "mission": "Explain what would make a fictional report decision-ready for its intended reader."
+  },
+  {
+    "id": "finance-perspective",
+    "term": "perspective",
+    "partOfSpeech": "noun",
+    "pronunciation": "puh-SPEK-tiv",
+    "meaning": "A way of considering a situation based on a particular position, purpose, or set of information.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:variance-review",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "clarify",
+      "align"
+    ],
+    "collocations": [
+      "financial perspective",
+      "from a cash perspective",
+      "consider another perspective"
+    ],
+    "example": "From a cash perspective, the delivery delay matters even though the customer order has not been cancelled.",
+    "whenToUse": "Use it when the same event has different implications for finance, operations, or another team.",
+    "avoidOrMisuse": "A perspective is a viewpoint, not a separate set of facts; explain how the views relate to the same situation.",
+    "mission": "Explain a fictional delivery delay from both a cash perspective and an operational perspective."
+  },
+  {
+    "id": "finance-conclusion",
+    "term": "conclusion",
+    "partOfSpeech": "noun",
+    "pronunciation": "kuhn-KLOO-zhuhn",
+    "meaning": "A judgement reached after considering the available information and reasoning.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:variance-review",
+      "finance:audit-discussion"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "clarify",
+      "recommend"
+    ],
+    "collocations": [
+      "supported conclusion",
+      "reach a conclusion",
+      "conclusion from the evidence"
+    ],
+    "example": "Our conclusion is that delivery timing explains most of the receipt delay, while one customer item still needs review.",
+    "whenToUse": "Use it to state what the evidence leads you to believe and what remains uncertain.",
+    "avoidOrMisuse": "Do not make a conclusion broader than the evidence supports; state limitations and distinguish it from a recommendation.",
+    "mission": "Give a conclusion from two fictional observations and name one remaining uncertainty."
+  },
+  {
+    "id": "finance-anticipate",
+    "term": "anticipate",
+    "partOfSpeech": "verb",
+    "pronunciation": "an-TIS-ih-payt",
+    "meaning": "To expect a possible event and consider or prepare for it in advance.",
+    "difficulty": "upper-b2",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "recommend",
+      "reassure"
+    ],
+    "collocations": [
+      "anticipate a delay",
+      "anticipate a change",
+      "anticipate the impact"
+    ],
+    "example": "We anticipate a possible delivery delay and will confirm the likely dates with operations this afternoon.",
+    "whenToUse": "Use it to discuss a forward-looking expectation and the preparation it motivates.",
+    "avoidOrMisuse": "Anticipate does not mean know for certain; explain the basis and level of uncertainty.",
+    "mission": "Say what change you anticipate in a fictional plan and how the team will prepare."
+  },
+  {
+    "id": "finance-exposure",
+    "term": "exposure",
+    "partOfSpeech": "noun",
+    "pronunciation": "ik-SPOH-zhuh",
+    "meaning": "The extent to which an amount, activity, or organisation could be affected by a particular risk.",
+    "difficulty": "c1",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:audit-discussion"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader",
+      "executive"
+    ],
+    "goals": [
+      "clarify",
+      "recommend"
+    ],
+    "collocations": [
+      "financial exposure",
+      "exposure to delays",
+      "reduce the exposure"
+    ],
+    "example": "Our exposure to this delivery delay is the launch stock dependent on the affected shipment.",
+    "whenToUse": "Use it to identify what is at risk and the relevant size or boundary of that risk.",
+    "avoidOrMisuse": "Exposure is not the same as a realised loss or the probability of one; state the specific risk and affected amount or activity.",
+    "mission": "Describe a fictional team's exposure to a delay without presenting the possible loss as certain."
+  },
+  {
+    "id": "finance-safeguard",
+    "term": "safeguard",
+    "partOfSpeech": "noun",
+    "pronunciation": "SAYF-gahd",
+    "meaning": "A measure intended to reduce the chance or impact of a problem.",
+    "difficulty": "upper-b2",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:audit-discussion"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "recommend",
+      "reassure"
+    ],
+    "collocations": [
+      "additional safeguard",
+      "practical safeguard",
+      "put a safeguard in place"
+    ],
+    "example": "A second review of changed supplier details is an additional safeguard in the team's agreed process.",
+    "whenToUse": "Use it when explaining a practical measure intended to protect against a specified problem.",
+    "avoidOrMisuse": "A safeguard reduces risk; it does not guarantee that a problem cannot occur. State the intended protection and its limits.",
+    "mission": "Describe a safeguard for a fictional process and the problem it is intended to reduce."
+  },
+  {
+    "id": "finance-credible",
+    "term": "credible",
+    "partOfSpeech": "adjective",
+    "pronunciation": "KRED-ih-buhl",
+    "meaning": "Reasonable to believe because it is supported by convincing information or a reliable basis.",
+    "difficulty": "upper-b2",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:audit-discussion",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader",
+      "executive"
+    ],
+    "goals": [
+      "reassure",
+      "influence"
+    ],
+    "collocations": [
+      "credible explanation",
+      "credible estimate",
+      "credible evidence"
+    ],
+    "example": "The estimate is credible because it uses confirmed delivery volumes and clearly states the remaining price assumption.",
+    "whenToUse": "Use it when explaining why a reader can place reasonable confidence in an account or estimate.",
+    "avoidOrMisuse": "Confidence or seniority alone does not make a claim credible; identify its supporting basis and relevant limitations.",
+    "mission": "Explain why a fictional estimate is credible while acknowledging one limitation."
+  },
+  {
+    "id": "finance-balanced",
+    "term": "balanced",
+    "partOfSpeech": "adjective",
+    "pronunciation": "BAL-uhnst",
+    "meaning": "Giving appropriate attention to relevant benefits, drawbacks, evidence, and uncertainty.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:audit-discussion",
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "clarify",
+      "reassure"
+    ],
+    "collocations": [
+      "balanced view",
+      "balanced assessment",
+      "balanced commentary"
+    ],
+    "example": "A balanced assessment includes the cost saving and the delivery delay associated with it.",
+    "whenToUse": "Use it when a reader needs a fair account of the relevant positive and negative effects.",
+    "avoidOrMisuse": "Balanced does not mean giving equal weight to unsupported and well-supported claims; weight points according to their relevance and evidence.",
+    "mission": "Write a balanced assessment of a fictional cost-saving proposal with one benefit and one drawback."
+  },
+  {
+    "id": "finance-explicit",
+    "term": "explicit",
+    "partOfSpeech": "adjective",
+    "pronunciation": "ik-SPLIS-it",
+    "meaning": "Stated directly and clearly rather than left for someone to infer.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:audit-discussion",
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager"
+    ],
+    "goals": [
+      "clarify",
+      "align"
+    ],
+    "collocations": [
+      "explicit assumption",
+      "explicit approval",
+      "make the limitation explicit"
+    ],
+    "example": "Make the delivery-date assumption explicit so the manager can assess how it affects the forecast.",
+    "whenToUse": "Use it when an important condition, request, or limitation must not be left unstated.",
+    "avoidOrMisuse": "Explicit means clearly expressed, not necessarily detailed or forceful; a short sentence can be explicit.",
+    "mission": "Make a hidden assumption in a fictional update explicit in one sentence."
+  },
+  {
+    "id": "finance-salient",
+    "term": "salient",
+    "partOfSpeech": "adjective",
+    "pronunciation": "SAY-lee-uhnt",
+    "meaning": "Most noticeable or important for understanding the matter being discussed.",
+    "difficulty": "c1",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader",
+      "executive"
+    ],
+    "goals": [
+      "clarify",
+      "influence"
+    ],
+    "collocations": [
+      "salient point",
+      "salient fact",
+      "salient feature"
+    ],
+    "example": "The salient point is that the receipts have moved into next month rather than disappeared from the full-year expectation.",
+    "whenToUse": "Use it when selecting the fact that a busy reader most needs to understand.",
+    "avoidOrMisuse": "Salient should reflect relevance to the reader's decision, not merely the largest number or most dramatic detail.",
+    "mission": "Identify the salient point in a fictional finance update and explain why it matters."
+  },
+  {
+    "id": "finance-priority",
+    "term": "priority",
+    "partOfSpeech": "noun",
+    "pronunciation": "pry-OR-ih-tee",
+    "meaning": "An action or issue that should receive attention before others because of its importance or urgency.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:month-end-close"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager",
+      "senior-leader",
+      "executive"
+    ],
+    "goals": [
+      "align",
+      "recommend"
+    ],
+    "collocations": [
+      "immediate priority",
+      "top priority",
+      "agree the priority"
+    ],
+    "example": "The immediate priority is to confirm delivery dates before the forecast review on Thursday.",
+    "whenToUse": "Use it when the team needs an explicit order of attention or action.",
+    "avoidOrMisuse": "Calling every task a top priority removes the distinction; state what comes first and why.",
+    "mission": "Name the immediate priority for a fictional reporting problem and explain what can wait."
+  },
+  {
+    "id": "finance-endorse",
+    "term": "endorse",
+    "partOfSpeech": "verb",
+    "pronunciation": "in-DAWS",
+    "meaning": "To express support or approval for a proposal, approach, or recommendation.",
+    "difficulty": "c1",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast"
+    ],
+    "seniority": [
+      "experienced-contributor",
+      "manager",
+      "senior-leader",
+      "executive"
+    ],
+    "goals": [
+      "influence",
+      "recommend"
+    ],
+    "collocations": [
+      "endorse the proposal",
+      "endorse the approach",
+      "endorse a recommendation"
+    ],
+    "example": "We ask the operations director to endorse the proposed weekly delivery review before the team starts it.",
+    "whenToUse": "Use it when asking a decision-maker to support a clearly described approach.",
+    "avoidOrMisuse": "Endorsement may not replace formal authorisation to spend or act; make the requested decision and any further approval clear.",
+    "mission": "Ask a fictional manager to endorse an approach and specify the decision you need."
+  },
+  {
+    "id": "finance-follow-through",
+    "term": "follow-through",
+    "partOfSpeech": "noun",
+    "pronunciation": "FOL-oh-throo",
+    "meaning": "The continued action needed to carry out an agreement and check that it achieves its intended result.",
+    "difficulty": "upper-b2",
+    "usefulness": "high",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:month-end-close"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "align",
+      "reassure"
+    ],
+    "collocations": [
+      "clear follow-through",
+      "consistent follow-through",
+      "ensure follow-through"
+    ],
+    "example": "Clear follow-through means the owner confirms the action is complete and checks the result at the next meeting.",
+    "whenToUse": "Use it when a recommendation or agreement must become completed, checked work.",
+    "avoidOrMisuse": "A single reminder is not necessarily follow-through; identify the action, owner, and completion check.",
+    "mission": "Describe the follow-through for a fictional decision, including its owner and a check-in date."
+  },
+  {
+    "id": "finance-evaluate",
+    "term": "evaluate",
+    "partOfSpeech": "verb",
+    "pronunciation": "ih-VAL-yoo-ayt",
+    "meaning": "To assess how useful, effective, or appropriate something is against stated criteria.",
+    "difficulty": "upper-b2",
+    "usefulness": "essential",
+    "learningMode": "active",
+    "roles": [
+      "finance-accounting"
+    ],
+    "situations": [
+      "finance:budget-forecast",
+      "finance:variance-review"
+    ],
+    "seniority": [
+      "early-career",
+      "experienced-contributor",
+      "manager",
+      "senior-leader"
+    ],
+    "goals": [
+      "recommend",
+      "clarify"
+    ],
+    "collocations": [
+      "evaluate the options",
+      "evaluate the outcome",
+      "evaluate against the criteria"
+    ],
+    "example": "We will evaluate the new reporting process after four weeks using timeliness and the number of unresolved queries.",
+    "whenToUse": "Use it when a choice or completed action needs assessment against an agreed purpose.",
+    "avoidOrMisuse": "Evaluate does not mean simply describe or approve; state the criteria and consider relevant drawbacks as well as benefits.",
+    "mission": "Explain how you will evaluate a fictional improvement, using two clear criteria."
+  }
+];
+
+export const professionalLearningPaths: readonly ProfessionalLearningPath[] = [
+  {
+    "id": "finance-foundations-v1",
+    "roleId": "finance-accounting",
+    "title": "Finance: from clear updates to confident decisions",
+    "description": "Build 90 useful words through 30 workplace lessons, from a close update to an executive recommendation. Each lesson contains three words and may span several days at your chosen pace. All situations and figures are fictional; practise communication and use your organisation's approved processes for real accounting decisions.",
+    "modules": [
+      {
+        "id": "finance-close-reporting",
+        "title": "Close the month clearly",
+        "outcome": "Write a close update that explains what is complete, what remains open, and who will act.",
+        "lessons": [
+          {
+            "id": "finance-foundations-01",
+            "title": "Lesson 1: Explain an open balance",
+            "situationId": "finance:month-end-close",
+            "objective": "Name a difference between records and state the next action without implying that it is already resolved.",
+            "wordIds": [
+              "finance-reconcile",
+              "finance-discrepancy",
+              "finance-outstanding"
+            ],
+            "challenge": "The fictional Northbank team finds a £240 difference between two expense reports. Write a two-sentence update with the action and the owner of the open item.",
+            "exampleResponse": "We will reconcile the two expense reports to explain the £240 discrepancy. The item remains outstanding, and Maya will provide an update tomorrow morning."
+          },
+          {
+            "id": "finance-foundations-02",
+            "title": "Lesson 2: Explain timing and allocation",
+            "situationId": "finance:month-end-close",
+          "objective": "Distinguish the reporting-period boundary from a submission deadline, and describe an agreed cost allocation.",
+            "wordIds": [
+              "finance-accrue",
+              "finance-cut-off",
+              "finance-allocate"
+            ],
+          "challenge": "Finance has agreed to accrue the cost of a service completed in June. The supplier invoice has not arrived, and the reporting period ends on 30 June. Write an update that names the reporting-period cut-off and the approved allocation to the facilities team.",
+          "exampleResponse": "Under the treatment already agreed with finance, we will accrue the estimated cost of the June service. The reporting-period cut-off is 30 June, and we will allocate the amount to the facilities team using the approved schedule."
+          },
+          {
+            "id": "finance-foundations-03",
+            "title": "Lesson 3: Bring the reports together",
+            "situationId": "finance:month-end-close",
+            "objective": "Describe combining inputs while making changes and missing information visible.",
+            "wordIds": [
+              "finance-consolidate",
+              "finance-adjustment",
+              "finance-completeness"
+            ],
+            "challenge": "Three departments sent their close files, and one corrected a duplicated line. Write a message explaining the combined report and the check still needed.",
+            "exampleResponse": "I will consolidate the three department files and show the duplicate-line adjustment separately. Before sharing the report, I will check completeness against the agreed list of submissions."
+          },
+          {
+            "id": "finance-foundations-04",
+            "title": "Lesson 4: Say what is ready",
+            "situationId": "finance:month-end-close",
+            "objective": "Distinguish a draft figure, a finished report, and formal approval.",
+            "wordIds": [
+              "finance-provisional",
+              "finance-finalise",
+              "finance-sign-off"
+            ],
+            "challenge": "The close report awaits one supplier confirmation and the controller's approval. Write an update that does not present the draft as approved.",
+            "exampleResponse": "The supplier figure remains provisional while we wait for confirmation. We can finalise the report after that check and then request sign-off from the controller."
+          },
+          {
+            "id": "finance-foundations-05",
+            "title": "Lesson 5: Hand over the close",
+            "situationId": "finance:month-end-close",
+            "objective": "Produce a short handover that another person can follow and check.",
+            "wordIds": [
+              "finance-traceable",
+              "finance-consistent",
+              "finance-handover"
+            ],
+            "challenge": "You are covering the close for a colleague. Write a three-sentence handover covering source links, naming conventions, and one remaining action.",
+            "exampleResponse": "Each adjustment is traceable to a linked source file. The report tabs use consistent names and dates. My handover identifies the supplier confirmation still needed and names Priya as its owner."
+          }
+        ]
+      },
+      {
+        "id": "finance-performance-explanation",
+        "title": "Explain what changed",
+        "outcome": "Write balanced performance commentary that separates size, cause, context, and consequence.",
+        "lessons": [
+          {
+            "id": "finance-foundations-06",
+            "title": "Lesson 6: Connect a result to its cause",
+            "situationId": "finance:variance-review",
+            "objective": "State the comparison and identify a supported explanation rather than a guess.",
+            "wordIds": [
+              "finance-variance",
+              "finance-driver",
+              "finance-attributable"
+            ],
+            "challenge": "Travel costs were £8,000 above plan. The approved event schedule explains £6,000; the balance is still under review. Draft a clear explanation.",
+            "exampleResponse": "The travel cost variance against plan is £8,000. The main driver is the additional customer event: £6,000 is attributable to that event, while we are still checking the remaining £2,000."
+          },
+          {
+            "id": "finance-foundations-07",
+            "title": "Lesson 7: Separate repeat costs from unusual events",
+            "situationId": "finance:variance-review",
+            "objective": "Distinguish expected repetition from a specific unusual event without hiding the net effect.",
+            "wordIds": [
+              "finance-recurring",
+              "finance-exceptional",
+              "finance-offset"
+            ],
+            "challenge": "A temporary office move cost £5,000, regular software fees rose £1,000, and lower travel spend saved £2,000. Explain the pattern without claiming an accounting classification.",
+            "exampleResponse": "The software increase is recurring, while the office move is an exceptional event in this month's operating discussion. Lower travel spend provides a £2,000 offset, so the combined increase is £4,000."
+          },
+          {
+            "id": "finance-foundations-08",
+            "title": "Lesson 8: Make a fair comparison",
+            "situationId": "finance:variance-review",
+            "objective": "Explain why two figures can or cannot be compared on the same basis.",
+            "wordIds": [
+              "finance-comparable",
+              "consulting-benchmark",
+              "finance-underlying"
+            ],
+            "challenge": "A branch's processing cost appears higher than a reference group, but it handles more complex cases. Write a qualified comparison.",
+            "exampleResponse": "The reference group's cost is a useful benchmark, but the case mix is not fully comparable. We need to separate the effect of complexity before drawing a conclusion about underlying efficiency."
+          },
+          {
+            "id": "finance-foundations-09",
+            "title": "Lesson 9: Explain significance",
+            "situationId": "finance:variance-review",
+            "objective": "Describe the scale and decision relevance of an issue and propose a proportionate response.",
+            "wordIds": [
+              "finance-quantify",
+              "finance-proportionate",
+              "finance-material"
+            ],
+            "challenge": "A reporting difference could change a manager's choice between two options. Write a message requesting analysis before a decision; do not invent a universal materiality threshold.",
+            "exampleResponse": "Please quantify the difference and explain whether it is material to this decision. A focused review of the affected lines would be proportionate before we choose an option."
+          },
+          {
+            "id": "finance-foundations-10",
+            "title": "Lesson 10: Write balanced commentary",
+            "situationId": "finance:variance-review",
+            "objective": "Produce a performance paragraph that includes both helpful and unhelpful movements.",
+            "wordIds": [
+              "finance-favourable",
+              "finance-adverse",
+              "finance-commentary"
+            ],
+            "challenge": "Costs are £7,000 below plan, but revenue is £10,000 below plan. Write commentary that avoids treating the cost saving alone as the full story.",
+          "exampleResponse": "The commentary should explain both movements against plan. The £7,000 cost reduction is favourable, but the £10,000 revenue shortfall is adverse; together, these two movements have a £3,000 adverse effect on the result."
+          }
+        ]
+      },
+      {
+        "id": "finance-forecast-conversations",
+        "title": "Discuss the future with care",
+        "outcome": "Present a forecast with its assumptions, uncertainty, cash implications, and revision triggers.",
+        "lessons": [
+          {
+            "id": "finance-foundations-11",
+            "title": "Lesson 11: State the starting point",
+            "situationId": "finance:budget-forecast",
+            "objective": "Separate an agreed starting point from an assumption and an updated expectation.",
+            "wordIds": [
+              "finance-assumption",
+              "finance-baseline",
+              "finance-forecast"
+            ],
+          "challenge": "Use an approved sales plan as a starting point, with a draft assumption that an event moves to November. In this fictional exercise, customers pay when the event takes place. Explain how the assumption changes the expected timing of receipts.",
+            "exampleResponse": "The approved plan is our baseline. Our current assumption is that the event moves to November, so the forecast shifts the expected receipts into that month."
+          },
+          {
+            "id": "finance-foundations-12",
+            "title": "Lesson 12: Describe the direction",
+            "situationId": "finance:budget-forecast",
+            "objective": "Describe a trend while explaining why the latest pace may not continue unchanged.",
+            "wordIds": [
+              "finance-run-rate",
+              "finance-seasonal",
+              "finance-trajectory"
+            ],
+            "challenge": "Support costs rose during a predictable summer peak. Explain why multiplying the latest month by twelve may overstate the annual expectation.",
+            "exampleResponse": "The current run rate reflects a seasonal peak in support demand. The expected cost trajectory is lower after August, so we should not treat this month's pace as a complete annual forecast."
+          },
+          {
+            "id": "finance-foundations-13",
+            "title": "Lesson 13: Make uncertainty visible",
+            "situationId": "finance:budget-forecast",
+            "objective": "Describe different plausible outcomes without claiming that a range is a guarantee.",
+            "wordIds": [
+              "finance-sensitivity",
+              "finance-scenario",
+              "finance-range"
+            ],
+            "challenge": "The team is exploring delivery delays of one to three weeks. Explain how it will show the effect on next month's receipts.",
+            "exampleResponse": "We will test the sensitivity of receipts to delivery timing. Each scenario will use a different delay, producing a range of possible results rather than a guaranteed outcome."
+          },
+          {
+            "id": "finance-foundations-14",
+            "title": "Lesson 14: Explain cash flexibility",
+            "situationId": "finance:budget-forecast",
+            "objective": "Distinguish available cash flexibility from reported performance.",
+            "wordIds": [
+              "finance-liquidity",
+              "finance-headroom",
+              "finance-timing"
+            ],
+            "challenge": "A fictional team has positive reported results, but a large receipt may arrive after a supplier payment. Write a question that makes the cash issue clear without giving financing advice.",
+            "exampleResponse": "How does the timing of the customer receipt affect our liquidity next week? Please show the cash headroom after the planned supplier payment so we can discuss the options."
+          },
+          {
+            "id": "finance-foundations-15",
+            "title": "Lesson 15: Present a plan for change",
+            "situationId": "finance:budget-forecast",
+            "objective": "Give a concise forecast update with an explicit condition for revisiting the plan.",
+            "wordIds": [
+              "operations-contingency",
+              "finance-trigger",
+              "finance-revise"
+            ],
+            "challenge": "The team has agreed a backup delivery arrangement if a supplier misses Friday's confirmation. Write the action, its trigger, and what will change in the forecast.",
+            "exampleResponse": "The contingency is to use the alternative delivery arrangement already agreed by the team. A missing supplier confirmation on Friday is the trigger; if it occurs, we will revise the delivery-cost forecast on Monday."
+          }
+        ]
+      },
+      {
+        "id": "finance-evidence-controls",
+        "title": "Make the work defensible",
+        "outcome": "Write an evidence-based response that makes the checks, approvals, exceptions, and remaining questions visible.",
+        "lessons": [
+          {
+            "id": "finance-foundations-16",
+            "title": "Lesson 16: Support what you say",
+            "situationId": "finance:audit-discussion",
+            "objective": "Connect a statement to evidence and distinguish support from independent confirmation.",
+            "wordIds": [
+              "finance-substantiate",
+              "finance-evidence",
+              "finance-corroborate"
+            ],
+            "challenge": "A reviewer asks how the team knows a fictional service was completed before month-end. Describe the records you would present, without assuming they prove every detail.",
+            "exampleResponse": "The completion record provides evidence to substantiate the reported service date. The customer's acknowledgement can corroborate that date, and we will flag any differences between the two records."
+          },
+          {
+            "id": "finance-foundations-17",
+            "title": "Lesson 17: Explain a check and its exceptions",
+            "situationId": "finance:audit-discussion",
+            "objective": "Describe what a check tests and how results outside an agreed boundary are handled.",
+            "wordIds": [
+              "finance-validate",
+              "finance-exception",
+              "finance-threshold"
+            ],
+            "challenge": "A team compares a report with a source file using an internally agreed tolerance. Explain what happens when a difference exceeds it; do not invent a regulatory rule.",
+            "exampleResponse": "We validate the report against the source file using the team's agreed threshold. Any difference above that limit is recorded as an exception for review, rather than treated as an automatic finding of error."
+          },
+          {
+            "id": "finance-foundations-18",
+            "title": "Lesson 18: Make responsibilities visible",
+            "situationId": "finance:audit-discussion",
+            "objective": "Separate responsibility for an outcome, supervision, and permission to act.",
+            "wordIds": [
+              "finance-accountability",
+              "finance-oversight",
+              "finance-authorise"
+            ],
+            "challenge": "Explain a fictional process in which a team lead owns completion, a manager reviews progress, and an approved delegate releases a change.",
+            "exampleResponse": "The team lead has accountability for completing the review, and the manager provides oversight. Only the designated delegate can authorise the change under the team's agreed process."
+          },
+          {
+            "id": "finance-foundations-19",
+            "title": "Lesson 19: Respond to a process gap",
+            "situationId": "finance:audit-discussion",
+            "objective": "Describe recording a problem, confirming the facts, and correcting the underlying weakness.",
+            "wordIds": [
+              "finance-document",
+              "finance-verify",
+              "finance-remediate"
+            ],
+            "challenge": "A reviewer found that one approval was not linked to the transaction file. Write a response that separates finding the record from improving the process.",
+            "exampleResponse": "We will document the missing link and verify whether the approval record exists. We will then remediate the filing gap by adding an owner and a completion check to the handover process."
+          },
+          {
+            "id": "finance-foundations-20",
+            "title": "Lesson 20: Close an evidence discussion",
+            "situationId": "finance:audit-discussion",
+            "objective": "Write a status response that builds confidence while naming what has not been resolved.",
+            "wordIds": [
+              "finance-transparent",
+              "finance-assurance",
+              "finance-unresolved"
+            ],
+            "challenge": "Four requested records have been checked, and one confirmation remains missing. Write an honest reviewer update without promising formal audit assurance.",
+          "exampleResponse": "We want to be transparent about the current position: four records have been checked, but the fifth item remains unresolved because the supplier confirmation is missing. Those checks give the team some assurance about the completed items; they do not resolve the open item."
+          }
+        ]
+      },
+      {
+        "id": "finance-stakeholder-decisions",
+        "title": "Help people decide",
+        "outcome": "Write a decision request that is clear, constructive, supported, and explicit about responsibility.",
+        "lessons": [
+          {
+            "id": "finance-foundations-21",
+            "title": "Lesson 21: Make the point understandable",
+            "situationId": "finance:budget-forecast",
+            "objective": "Explain a proposal's reason and consequence in language a non-finance colleague can use.",
+            "wordIds": [
+              "finance-clarify",
+              "finance-implication",
+              "finance-rationale"
+            ],
+            "challenge": "A colleague thinks a proposed spending delay means their project is cancelled. Write a short response that clarifies the proposal and its effect.",
+          "exampleResponse": "Let me clarify the proposal: we are discussing a one-month spending delay, not cancelling the project. The rationale is to match payment timing to receipts; one possible implication is a later start date, which we need to assess together."
+          },
+          {
+            "id": "finance-foundations-22",
+            "title": "Lesson 22: Offer a workable option",
+            "situationId": "finance:budget-forecast",
+            "objective": "Make a recommendation that acknowledges practical limits.",
+            "wordIds": [
+              "finance-recommend",
+              "finance-feasible",
+              "finance-constraint"
+            ],
+            "challenge": "A team can fund only one of two training sessions this quarter. Recommend an option using a fictional operational reason, and name the limit.",
+            "exampleResponse": "I recommend running the smaller workshop this quarter because it fits the available trainer time. The main constraint is the approved training budget, and this option appears feasible within it."
+          },
+          {
+            "id": "finance-foundations-23",
+            "title": "Lesson 23: Disagree usefully",
+            "situationId": "finance:variance-review",
+            "objective": "Question an explanation respectfully and propose a useful next step.",
+            "wordIds": [
+              "finance-challenge",
+              "finance-constructive",
+              "finance-alternative"
+            ],
+            "challenge": "A colleague attributes every cost increase to inflation, but volumes also rose. Write a constructive challenge with an alternative analysis.",
+            "exampleResponse": "May I challenge the explanation that inflation caused the full increase? A constructive alternative is to separate price and volume changes before we agree the commentary."
+          },
+          {
+            "id": "finance-foundations-24",
+            "title": "Lesson 24: Agree who will act",
+            "situationId": "finance:month-end-close",
+            "objective": "Turn agreement in a meeting into a specific responsibility and promise.",
+            "wordIds": [
+              "finance-align",
+              "finance-commitment",
+              "finance-ownership"
+            ],
+            "challenge": "Two departments assume the other will send a missing report. Write the closing lines of a meeting note that assigns the work and confirms timing.",
+            "exampleResponse": "Let us align on the next action: Noor will take ownership of the missing report. Please confirm the team's commitment to send it by 10 am tomorrow."
+          },
+          {
+            "id": "finance-foundations-25",
+            "title": "Lesson 25: Write a useful decision request",
+            "situationId": "finance:budget-forecast",
+            "objective": "Produce a brief request with sufficient evidence and a visible limitation.",
+            "wordIds": [
+              "finance-concise",
+              "finance-caveat",
+              "finance-decision-ready"
+            ],
+          "challenge": "Ask a manager to choose between standard delivery next Monday for £800 and express delivery this Friday for an estimated £1,100. Keep the request concise and decision-ready for a provisional choice, and identify the unconfirmed express price as a caveat.",
+          "exampleResponse": "Please choose between standard delivery next Monday for £800 and express delivery this Friday for an estimated £1,100. This concise comparison is decision-ready for a provisional choice, with one caveat: the supplier must still confirm the express price."
+          }
+        ]
+      },
+      {
+        "id": "finance-executive-communication",
+        "title": "Bring the whole picture together",
+        "outcome": "Deliver a short executive update with a supported conclusion, visible uncertainty, a decision, and a follow-up action.",
+        "lessons": [
+          {
+            "id": "finance-foundations-26",
+            "title": "Lesson 26: Connect several viewpoints",
+            "situationId": "finance:variance-review",
+            "objective": "Combine finance and operational observations into a supported conclusion.",
+            "wordIds": [
+              "consulting-synthesise",
+              "finance-perspective",
+              "finance-conclusion"
+            ],
+            "challenge": "Sales reports strong demand, operations reports delivery delays, and finance sees later receipts. Write a connected conclusion without claiming demand has disappeared.",
+            "exampleResponse": "We can synthesise the three updates rather than treating them as conflicting reports. From the cash perspective, the conclusion is that delivery timing is delaying receipts even while demand remains strong."
+          },
+          {
+            "id": "finance-foundations-27",
+            "title": "Lesson 27: Put a risk in context",
+            "situationId": "finance:budget-forecast",
+            "objective": "Explain an uncertain future issue, the amount or activity affected, and an agreed protective step.",
+            "wordIds": [
+              "finance-anticipate",
+              "finance-exposure",
+              "finance-safeguard"
+            ],
+            "challenge": "A fictional supplier may delay a shipment used in an important launch. Write a risk update that does not describe the delay as certain.",
+            "exampleResponse": "We anticipate a possible delay, although the supplier has not confirmed one. Our exposure is the launch stock dependent on that shipment, and the agreed safeguard is an earlier delivery-status check with the operations lead."
+          },
+          {
+            "id": "finance-foundations-28",
+            "title": "Lesson 28: Earn trust through clarity",
+            "situationId": "finance:audit-discussion",
+            "objective": "Present a trustworthy account by distinguishing supported facts, limitations, and assumptions.",
+            "wordIds": [
+              "finance-credible",
+              "finance-balanced",
+              "finance-explicit"
+            ],
+            "challenge": "Draft an opening line for a finance update that reports a positive result but makes uncertainty about one estimate clear.",
+            "exampleResponse": "A credible update must be balanced: performance improved, but one estimate is still being checked. We should be explicit about that limitation and show how much of the result depends on it."
+          },
+          {
+            "id": "finance-foundations-29",
+            "title": "Lesson 29: Lead with what matters",
+            "situationId": "finance:budget-forecast",
+            "objective": "Write a short executive summary with the most relevant fact and the decision priority.",
+            "wordIds": [
+              "consulting-executive-summary",
+              "finance-salient",
+              "finance-priority"
+            ],
+            "challenge": "Write an executive summary for a fictional delivery delay that moves receipts into next month. Include the salient fact, immediate priority, and requested discussion.",
+            "exampleResponse": "This executive summary highlights one salient fact: delivery delays are moving receipts into next month. Our immediate priority is to confirm the revised delivery dates and cash timing. We request a short decision meeting on the available scheduling options."
+          },
+          {
+            "id": "finance-foundations-30",
+            "title": "Lesson 30: Secure a decision and follow it through",
+            "situationId": "finance:budget-forecast",
+            "objective": "Deliver a final recommendation with evidence, a limitation, a decision owner, and a success check.",
+            "wordIds": [
+              "finance-endorse",
+              "finance-follow-through",
+              "finance-evaluate"
+            ],
+            "challenge": "Use the vocabulary from this path to write a four-sentence executive update. Present a fictional finding, its financial implication and one caveat, then ask for a decision and define the follow-up. Include all three new words.",
+            "exampleResponse": "The report indicates that a delivery delay will move £12,000 of receipts into next month, although the supplier date remains provisional. I ask the operations director to endorse the proposed weekly delivery check so we can revise the forecast promptly. Sam will own the follow-through and send an update each Friday. We will evaluate the approach after four weeks by comparing confirmed delivery dates with the forecast."
+          }
+        ]
+      }
+    ]
+  }
+];
+
 export const professionalWords: readonly ProfessionalWord[] = [
+  ...financePathWords,
   // Finance & Accounting
   {
     id: "finance-reconcile",
@@ -440,6 +3684,20 @@ export const professionalWords: readonly ProfessionalWord[] = [
   },
   {
     id: "finance-variance",
+    roleContexts: {
+      "operations-supply-chain": {
+        "meaning": "The difference between an actual operational result and a stated target or plan.",
+        "example": "The delivery-time variance was two days: orders arrived in seven days against a five-day target.",
+        "whenToUse": "Use it to describe a measurable gap in delivery time, output, stock levels, or another operational result before explaining the cause.",
+        "avoidOrMisuse": "State the actual result, comparison point, and unit. Here variance means a gap from a target, not the statistical measure of how spread out observations are.",
+        "mission": "Describe a fictional delivery-time variance, state the target and actual result, and give one possible cause.",
+        "collocations": [
+          "delivery-time variance",
+          "variance from plan",
+          "explain the variance"
+        ]
+      }
+    },
     term: "variance",
     partOfSpeech: "noun",
     pronunciation: "VAIR-ee-uhns",
@@ -478,6 +3736,20 @@ export const professionalWords: readonly ProfessionalWord[] = [
   },
   {
     id: "finance-material",
+    roleContexts: {
+      "consulting-strategy": {
+        "meaning": "Significant enough to affect a recommendation, decision, or outcome.",
+        "example": "Customer interviews revealed a material gap in after-sales support, so we revised our market-entry recommendation.",
+        "whenToUse": "Use it to distinguish evidence, differences, or risks that could change a client's decision from minor details.",
+        "avoidOrMisuse": "Material here means significant, not physical. Explain which decision or outcome could change instead of using the word only for emphasis.",
+        "mission": "Describe a material finding from a fictional client project and explain how it changes your recommendation.",
+        "collocations": [
+          "material impact",
+          "material difference",
+          "material risk"
+        ]
+      }
+    },
     term: "material",
     partOfSpeech: "adjective",
     pronunciation: "muh-TEER-ee-uhl",
@@ -497,6 +3769,20 @@ export const professionalWords: readonly ProfessionalWord[] = [
   },
   {
     id: "finance-substantiate",
+    roleContexts: {
+      "consulting-strategy": {
+        "meaning": "To support a claim or recommendation with relevant, reliable evidence.",
+        "example": "We need customer interviews and usage data to substantiate the recommendation to simplify onboarding.",
+        "whenToUse": "Use it when a client or colleague needs to see the evidence behind an analysis, claim, or recommended action.",
+        "avoidOrMisuse": "Repeating a claim more confidently does not substantiate it. Identify evidence that supports the claim and acknowledge important gaps.",
+        "mission": "Use substantiate in a sentence naming a fictional client recommendation and the evidence you would use to support it.",
+        "collocations": [
+          "substantiate a claim",
+          "substantiate a recommendation",
+          "evidence to substantiate"
+        ]
+      }
+    },
     term: "substantiate",
     partOfSpeech: "verb",
     pronunciation: "suhb-STAN-shee-ayt",
@@ -516,6 +3802,20 @@ export const professionalWords: readonly ProfessionalWord[] = [
   },
   {
     id: "finance-run-rate",
+    roleContexts: {
+      "sales-business-development": {
+        "meaning": "A projection of sales performance over a longer period, assuming the current pace continues.",
+        "example": "At the current run rate of ten new customers a month, we would add 120 over a full year if that pace continued.",
+        "whenToUse": "Use it for a quick projection from a recent sales period, stating both the period and the assumption that the pace continues.",
+        "avoidOrMisuse": "A run rate is not a forecast or a guarantee. Seasonal demand, promotions, or a single unusual deal can make the current pace unrepresentative.",
+        "mission": "Use run rate to project a fictional pace of new-customer wins over a year, then name one reason the actual result could differ.",
+        "collocations": [
+          "sales run rate",
+          "current run rate",
+          "annualised run rate"
+        ]
+      }
+    },
     term: "run rate",
     partOfSpeech: "noun phrase",
     pronunciation: "RUN-rayt",
@@ -1499,6 +4799,32 @@ export const professionalWords: readonly ProfessionalWord[] = [
   // Healthcare
   {
     id: "healthcare-triage",
+    roleContexts: {
+      "technology-engineering": {
+        "meaning": "To assess incoming incidents or bug reports by impact and urgency, then prioritise the next response.",
+        "example": "We triage incoming bug reports by user impact before assigning an owner and a next action.",
+        "whenToUse": "Use it when an engineering or support team needs to sort new issues and decide which need attention first.",
+        "avoidOrMisuse": "A triaged issue is not necessarily fixed. State its priority and next action without claiming a root cause you have not established.",
+        "mission": "Explain how you would triage three fictional software issues, then identify which issue needs attention first and why.",
+        "collocations": [
+          "triage bug reports",
+          "triage incoming incidents",
+          "initial triage"
+        ]
+      },
+      "operations-supply-chain": {
+        "meaning": "To assess disrupted orders or operational problems and decide which need attention first.",
+        "example": "We triage delayed shipments by customer impact and promised delivery date, then assign an owner to urgent cases.",
+        "whenToUse": "Use it when several delivery, supplier, or process problems compete for limited attention and you need to set a response order.",
+        "avoidOrMisuse": "First reported does not always mean most urgent. Explain your prioritisation criteria; triage does not mean the problem has been resolved.",
+        "mission": "Explain how you would triage three fictional delayed orders, using their impact and urgency to choose the first response.",
+        "collocations": [
+          "triage delayed orders",
+          "triage supplier issues",
+          "triage incoming requests"
+        ]
+      }
+    },
     term: "triage",
     partOfSpeech: "verb",
     pronunciation: "TREE-ahzh",

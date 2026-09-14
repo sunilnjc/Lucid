@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>UIUserInterfaceStyle</key>
+    <string>Dark</string>
+    <key>LucidSupabaseURL</key>
+    <string>$(LUCID_SUPABASE_URL)</string>
+    <key>LucidSupabasePublishableKey</key>
+    <string>$(LUCID_SUPABASE_PUBLISHABLE_KEY)</string>
+    <key>LucidCloudAuthEnabled</key>
+    <string>$(LUCID_CLOUD_AUTH_ENABLED)</string>
+    <key>LucidEmailDeliveryReady</key>
+    <string>$(LUCID_EMAIL_DELIVERY_READY)</string>
+</dict>
+</plist>
