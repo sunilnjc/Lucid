@@ -21,11 +21,11 @@ test("iOS catalogue stays aligned with the canonical professional content", asyn
   assert.equal(catalogue.roles.length, 8);
   assert.equal(catalogue.seniorityLevels.length, 5);
   assert.equal(catalogue.goals.length, 8);
-  assert.equal(catalogue.words.length, 143);
+  assert.ok(catalogue.words.length > 143, "Expanded courses must add substantial vocabulary");
   assert.equal(new Set(catalogue.words.map(({ id }) => id)).size, catalogue.words.length);
-  assert.equal(catalogue.learningPaths.length, 1);
-  const path = catalogue.learningPaths[0];
-  assert.equal(path.roleId, "finance-accounting");
+  assert.equal(catalogue.learningPaths.length, 8);
+  assert.equal(new Set(catalogue.learningPaths.map(path => path.roleId)).size, 8);
+  for (const path of catalogue.learningPaths) {
   assert.equal(path.modules.length, 6);
   assert.ok(path.modules.every(({ lessons }) => lessons.length === 5));
   const lessons = path.modules.flatMap(({ lessons }) => lessons);
@@ -34,19 +34,38 @@ test("iOS catalogue stays aligned with the canonical professional content", asyn
   assert.equal(new Set(ids).size, 90);
   assert.ok(lessons.every(lesson => lesson.wordIds.length === 3 && lesson.objective && lesson.challenge && lesson.exampleResponse));
   assert.ok(lessons.every(lesson => lesson.wordIds.every(id => catalogue.words.some(word => word.id === id && word.learningMode === "active" && word.roles.includes(path.roleId) && word.situations.includes(lesson.situationId)))));
+  assert.equal(path.startingCheck.length, 6);
+  assert.equal(new Set(path.startingCheck.map(item => item.id)).size, 6);
+  for (const item of path.startingCheck) {
+    assert.ok(item.prompt && item.explanation);
+    assert.equal(new Set(item.options).size, 3);
+    assert.ok(Number.isInteger(item.correctIndex) && item.correctIndex >= 0 && item.correctIndex < 3);
+  }
+  }
   assert.ok(catalogue.roles.every(({ situations }) => situations.length === 4));
   assert.ok(catalogue.words.every(({ collocations }) => collocations.length >= 2));
   let contexts = 0;
   for (const word of catalogue.words) {
+    if (word.learningMode === "active") {
+      for (const roleId of word.roles.slice(1)) {
+        assert.ok(word.roleContexts?.[roleId], `${word.id}: missing secondary role context for ${roleId}`);
+      }
+      for (const roleId of word.roles) {
+        const roleSituations = new Set(catalogue.roles.find(role => role.id === roleId).situations.map(item => item.id));
+        assert.ok(word.situations.some(id => roleSituations.has(id)), `${word.id}: missing situation for ${roleId}`);
+      }
+    }
     for (const [roleId, context] of Object.entries(word.roleContexts ?? {})) {
       contexts += 1;
       assert.ok(word.roles.includes(roleId), `${word.id}: context belongs to an untagged role`);
       for (const field of ["meaning", "example", "whenToUse", "avoidOrMisuse", "mission"]) assert.ok(context[field]?.trim());
       assert.ok(context.collocations.length >= 2);
-      assert.ok(context.example.toLowerCase().includes(word.term.toLowerCase()));
+      assert.ok(context.example.toLowerCase().includes(word.term.toLowerCase()), `${word.id}/${roleId} example must use the term`);
     }
   }
-  assert.equal(contexts, 6);
+  assert.ok(contexts > 100, "Shared terms need genuinely authored role contexts");
+  const legacy = JSON.parse(await text("tests/fixtures/catalogue-v1-identities.json"));
+  for (const word of legacy) assert.ok(catalogue.words.some(current => current.id === word.id && current.term === word.term), `Lost legacy identity: ${word.id}`);
 });
 
 test("iOS implementation is native, mobile-accessible, and review ready", async () => {

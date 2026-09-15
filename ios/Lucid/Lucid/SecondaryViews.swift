@@ -310,7 +310,7 @@ struct WordDetailView: View {
                 CardDetail(label: "AVOID", text: word.avoidOrMisuse)
                 CardDetail(label: "PRACTICE MISSION", text: word.mission)
                 Button { store.toggleFavourite(word.id) } label: {
-                    Label(store.isFavourite(word.id) ? "Remove from favourites" : "Save to favourites", systemImage: store.isFavourite(word.id) ? "bookmark.slash" : "bookmark")
+                    Label(store.isFavourite(word.id) ? "Remove bookmark" : "Bookmark", systemImage: store.isFavourite(word.id) ? "bookmark.slash" : "bookmark")
                         .frame(maxWidth: .infinity, minHeight: 48)
                 }
                 .buttonStyle(.bordered)

@@ -144,7 +144,105 @@ final class LearningStore: ObservableObject {
         return Double(pathCompletedWordCount) / Double(Set(path.wordIds).count)
     }
     var nextPathLesson: ProfessionalPathLesson? {
-        learningPath?.lessons.first { lesson in lesson.wordIds.contains { !data.introducedWordIds.contains($0) } }
+        guard let path = learningPath else { return nil }
+        return orderedModules(in: path, for: data).flatMap(\.lessons)
+            .first { lesson in lesson.wordIds.contains { !data.introducedWordIds.contains($0) } }
+    }
+
+    func orderedModules(in path: ProfessionalLearningPath, for learner: LearnerData) -> [ProfessionalPathModule] {
+        guard let placement = learner.pathPlacements?[path.roleId], placement.pathId == path.id,
+              let index = path.modules.firstIndex(where: { $0.id == placement.startingModuleId }) else { return path.modules }
+        // A starting point changes sequence only. Earlier content remains available and returns later.
+        return Array(path.modules.dropFirst(index)) + Array(path.modules.prefix(index))
+    }
+
+    var courseStartingModule: ProfessionalPathModule? {
+        guard let path = learningPath, let placement = data.pathPlacements?[path.roleId], placement.pathId == path.id else { return nil }
+        return path.modules.first { $0.id == placement.startingModuleId }
+    }
+
+    var startingCheckQuestions: [CourseCheckQuestion] {
+        guard let questions = learningPath?.startingCheck, questions.count == 6,
+              Set(questions.map(\.id)).count == questions.count,
+              questions.allSatisfy({ !$0.prompt.isEmpty && !$0.explanation.isEmpty && $0.options.count == 3 && Set($0.options).count == 3 && $0.options.indices.contains($0.correctIndex) }) else { return [] }
+        return questions
+    }
+
+    var startingCheckAnswers: [Int] {
+        guard let path = learningPath, !startingCheckQuestions.isEmpty,
+              let draft = data.courseCheckDrafts?[path.roleId], draft.pathId == path.id,
+              draft.questionSignature == startingCheckSignature,
+              draft.answers.count <= startingCheckQuestions.count,
+              draft.answers.allSatisfy({ (-1...2).contains($0) }) else { return [] }
+        return draft.answers
+    }
+
+    private var startingCheckSignature: String {
+        // Stable cache identity only, not a security digest. Bind positional answers to
+        // the exact authored questions/options so an app update cannot reinterpret them.
+        CourseCheckDraft.signature(for: startingCheckQuestions)
+    }
+
+    var startingCheckWasUpdated: Bool {
+        guard let path = learningPath, let draft = data.courseCheckDrafts?[path.roleId], !draft.answers.isEmpty else { return false }
+        return draft.pathId != path.id || draft.questionSignature != startingCheckSignature
+    }
+
+    var startingCheckScore: Int? {
+        let questions = startingCheckQuestions, answers = startingCheckAnswers
+        guard !questions.isEmpty, answers.count == questions.count else { return nil }
+        return zip(questions, answers).filter { $0.correctIndex == $1 }.count
+    }
+
+    var suggestedStartingModuleIndex: Int? {
+        guard let score = startingCheckScore, let path = learningPath else { return nil }
+        let foundationCorrect = zip(startingCheckQuestions.prefix(2), startingCheckAnswers.prefix(2)).allSatisfy { $0.correctIndex == $1 }
+        let proposed = foundationCorrect && score >= 4 ? (score == 6 ? 4 : 2) : 0
+        return min(proposed, max(0, path.modules.count - 1))
+    }
+
+    /// Never replace written work, a completed word, or a day's earned milestone.
+    var startingCheckCanReplaceToday: Bool {
+        !isTodayComplete && !hasTapWorkToday(roleId: profile?.roleId ?? "") && data.currentWordIds.allSatisfy { id in
+            !data.completedWordIdsToday.contains(id) && draft(for: id).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
+
+    @discardableResult
+    func answerStartingCheck(pathId: String, questionId: String, choice: Int) -> Bool {
+        guard !storageBlocked, let path = learningPath, path.id == pathId, (-1...2).contains(choice) else { return false }
+        let questions = startingCheckQuestions, answers = startingCheckAnswers
+        guard answers.count < questions.count, questions[answers.count].id == questionId else { return false }
+        var drafts = data.courseCheckDrafts ?? [:]
+        drafts[path.roleId] = CourseCheckDraft(pathId: path.id, answers: answers + [choice], questionSignature: startingCheckSignature)
+        data.courseCheckDrafts = drafts
+        return !hasUnsavedChanges
+    }
+
+    func restartStartingCheck(pathId: String) {
+        guard !storageBlocked, let path = learningPath, path.id == pathId else { return }
+        var drafts = data.courseCheckDrafts ?? [:]
+        drafts[path.roleId] = CourseCheckDraft(pathId: path.id, answers: [], questionSignature: startingCheckSignature)
+        data.courseCheckDrafts = drafts
+    }
+
+    @discardableResult
+    func applyStartingPoint(pathId: String, useSuggested: Bool) -> Bool {
+        guard !storageBlocked, let path = learningPath, path.id == pathId,
+              let score = startingCheckScore, let suggested = suggestedStartingModuleIndex,
+              !path.modules.isEmpty else { return false }
+        let index = useSuggested ? suggested : 0
+        let replaceToday = startingCheckCanReplaceToday
+        let now = clock()
+        var next = data
+        var placements = next.pathPlacements ?? [:]
+        placements[path.roleId] = PathPlacement(pathId: path.id, startingModuleId: path.modules[index].id,
+                                               checkedAt: now, correctAnswers: score, questionCount: startingCheckQuestions.count)
+        next.pathPlacements = placements
+        // Keep the answered check until its result has actually reached durable storage.
+        data = normalizedDailyPlan(next, at: now, replacingUnstartedRole: replaceToday ? path.roleId : nil)
+        currentDate = now
+        return !hasUnsavedChanges
     }
     func pathDraft(for lessonId: String) -> String { data.practiceDrafts?["path:\(lessonId)"] ?? "" }
     func savePathDraft(_ text: String, lessonId: String) {
@@ -274,7 +372,7 @@ final class LearningStore: ObservableObject {
 
     /// One role/day owns one frozen plan. Safe for local edits, upgrades, backup and sync.
     /// Never uses the store's current profile to interpret an incoming account snapshot.
-    func normalizedDailyPlan(_ input: LearnerData, at now: Date) -> LearnerData {
+    func normalizedDailyPlan(_ input: LearnerData, at now: Date, replacingUnstartedRole: String? = nil) -> LearnerData {
         guard let profile = input.profile, catalog.roles.contains(where: { $0.id == profile.roleId }) else { return input }
         let dayKey = now.lucidDayKey
         let sameDay = (input.lessonDayKey ?? input.currentLessonDate?.lucidDayKey) == dayKey
@@ -297,7 +395,9 @@ final class LearningStore: ObservableObject {
            catalog.roles.contains(where: { $0.id == owner }), valid(input.currentWordIds, for: owner) {
             plans[owner] = DailyRolePlan(dayKey: dayKey, wordIds: input.currentWordIds)
         }
-        let adoptCurrent = sameDay && (input.lessonRoleId == nil || input.lessonRoleId == profile.roleId)
+        let replacing = replacingUnstartedRole == profile.roleId
+        if replacing { plans.removeValue(forKey: profile.roleId) }
+        let adoptCurrent = !replacing && sameDay && (input.lessonRoleId == nil || input.lessonRoleId == profile.roleId)
             && valid(input.currentWordIds, for: profile.roleId)
             && (!input.currentWordIds.isEmpty || input.lessonRoleId == profile.roleId || candidates.isEmpty)
         var next = input
@@ -310,7 +410,8 @@ final class LearningStore: ObservableObject {
             next.currentWordIds = saved.wordIds
         } else if let path = learningPath(for: profile.roleId) {
             var seen = Set<String>()
-            next.currentWordIds = path.wordIds.filter { !introduced.contains($0) && seen.insert($0).inserted }
+            next.currentWordIds = orderedModules(in: path, for: input).flatMap(\.lessons).flatMap(\.wordIds)
+                .filter { !introduced.contains($0) && seen.insert($0).inserted }
                 .prefix(min(3, max(1, input.dailyWordGoal ?? 3))).map { $0 }
         } else {
             next.currentWordIds = candidates.sorted {
@@ -327,6 +428,8 @@ final class LearningStore: ObservableObject {
         next.completedWordIdsToday = ((sameDay ? input.completedWordIdsToday : []) + practised + completed)
             .filter { word(id: $0) != nil && seen.insert($0).inserted }
         if !sameDay {
+            next.tapPracticeAttempts = (next.tapPracticeAttempts ?? [:]).filter { $0.key.hasPrefix("\(dayKey):") }
+            next.practiceCursors = (next.practiceCursors ?? [:]).filter { $0.value.dayKey == dayKey }
             next.practiceDrafts = (next.practiceDrafts ?? [:]).filter { key, _ in
                 word(id: key) != nil || key.hasPrefix("recall:\(dayKey):")
                     || (key.hasPrefix("path:") && catalog.learningPaths?.contains(where: { $0.lessons.contains { "path:\($0.id)" == key } }) == true)
@@ -398,7 +501,7 @@ final class LearningStore: ObservableObject {
         next.completedWordIdsToday.append(wordId)
         next.activities = activities + [LearningActivity(id: UUID(), kind: .practice, wordId: wordId, date: now, dayKey: now.lucidDayKey, quality: quality.rawValue, productive: false)]
         data = next
-        return true
+        return !hasUnsavedChanges
     }
 
     @discardableResult
@@ -442,7 +545,7 @@ final class LearningStore: ObservableObject {
     @discardableResult
     func completeToday() -> Bool {
         let now = clock()
-        guard !storageBlocked, data.lessonDayKey == now.lucidDayKey, !data.currentWordIds.isEmpty,
+        guard !storageBlocked, !hasUnsavedChanges, data.lessonDayKey == now.lucidDayKey, !data.currentWordIds.isEmpty,
               data.currentWordIds.allSatisfy(data.completedWordIdsToday.contains),
               !data.sessions.contains(where: { $0.localDayKey == now.lucidDayKey }),
               !activities.contains(where: { $0.dayKey == now.lucidDayKey && $0.kind == .lesson }) else { return false }
@@ -450,7 +553,7 @@ final class LearningStore: ObservableObject {
         next.sessions.append(DailySession(id: UUID(), date: now.lucidStartOfDay, wordIds: next.currentWordIds, completedAt: now, dayKey: now.lucidDayKey))
         next.activities = activities + [LearningActivity(id: UUID(), kind: .lesson, wordId: nil, date: now, dayKey: now.lucidDayKey, quality: 2, productive: true)]
         data = next
-        return true
+        return !hasUnsavedChanges
     }
 
     func shouldRequestReview() -> Bool {

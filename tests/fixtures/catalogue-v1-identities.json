@@ -1,0 +1,574 @@
+[
+  {
+    "id": "finance-discrepancy",
+    "term": "discrepancy"
+  },
+  {
+    "id": "finance-outstanding",
+    "term": "outstanding"
+  },
+  {
+    "id": "finance-cut-off",
+    "term": "cut-off"
+  },
+  {
+    "id": "finance-allocate",
+    "term": "allocate"
+  },
+  {
+    "id": "finance-consolidate",
+    "term": "consolidate"
+  },
+  {
+    "id": "finance-adjustment",
+    "term": "adjustment"
+  },
+  {
+    "id": "finance-completeness",
+    "term": "completeness"
+  },
+  {
+    "id": "finance-provisional",
+    "term": "provisional"
+  },
+  {
+    "id": "finance-finalise",
+    "term": "finalise"
+  },
+  {
+    "id": "finance-sign-off",
+    "term": "sign-off"
+  },
+  {
+    "id": "finance-traceable",
+    "term": "traceable"
+  },
+  {
+    "id": "finance-consistent",
+    "term": "consistent"
+  },
+  {
+    "id": "finance-handover",
+    "term": "handover"
+  },
+  {
+    "id": "finance-driver",
+    "term": "driver"
+  },
+  {
+    "id": "finance-attributable",
+    "term": "attributable"
+  },
+  {
+    "id": "finance-recurring",
+    "term": "recurring"
+  },
+  {
+    "id": "finance-exceptional",
+    "term": "exceptional"
+  },
+  {
+    "id": "finance-offset",
+    "term": "offset"
+  },
+  {
+    "id": "finance-comparable",
+    "term": "comparable"
+  },
+  {
+    "id": "finance-underlying",
+    "term": "underlying"
+  },
+  {
+    "id": "finance-quantify",
+    "term": "quantify"
+  },
+  {
+    "id": "finance-proportionate",
+    "term": "proportionate"
+  },
+  {
+    "id": "finance-favourable",
+    "term": "favourable"
+  },
+  {
+    "id": "finance-adverse",
+    "term": "adverse"
+  },
+  {
+    "id": "finance-commentary",
+    "term": "commentary"
+  },
+  {
+    "id": "finance-assumption",
+    "term": "assumption"
+  },
+  {
+    "id": "finance-baseline",
+    "term": "baseline"
+  },
+  {
+    "id": "finance-forecast",
+    "term": "forecast"
+  },
+  {
+    "id": "finance-seasonal",
+    "term": "seasonal"
+  },
+  {
+    "id": "finance-trajectory",
+    "term": "trajectory"
+  },
+  {
+    "id": "finance-sensitivity",
+    "term": "sensitivity"
+  },
+  {
+    "id": "finance-scenario",
+    "term": "scenario"
+  },
+  {
+    "id": "finance-range",
+    "term": "range"
+  },
+  {
+    "id": "finance-headroom",
+    "term": "headroom"
+  },
+  {
+    "id": "finance-timing",
+    "term": "timing"
+  },
+  {
+    "id": "finance-trigger",
+    "term": "trigger"
+  },
+  {
+    "id": "finance-revise",
+    "term": "revise"
+  },
+  {
+    "id": "finance-evidence",
+    "term": "evidence"
+  },
+  {
+    "id": "finance-corroborate",
+    "term": "corroborate"
+  },
+  {
+    "id": "finance-validate",
+    "term": "validate"
+  },
+  {
+    "id": "finance-exception",
+    "term": "exception"
+  },
+  {
+    "id": "finance-threshold",
+    "term": "threshold"
+  },
+  {
+    "id": "finance-accountability",
+    "term": "accountability"
+  },
+  {
+    "id": "finance-oversight",
+    "term": "oversight"
+  },
+  {
+    "id": "finance-authorise",
+    "term": "authorise"
+  },
+  {
+    "id": "finance-document",
+    "term": "document"
+  },
+  {
+    "id": "finance-verify",
+    "term": "verify"
+  },
+  {
+    "id": "finance-remediate",
+    "term": "remediate"
+  },
+  {
+    "id": "finance-transparent",
+    "term": "transparent"
+  },
+  {
+    "id": "finance-assurance",
+    "term": "assurance"
+  },
+  {
+    "id": "finance-unresolved",
+    "term": "unresolved"
+  },
+  {
+    "id": "finance-clarify",
+    "term": "clarify"
+  },
+  {
+    "id": "finance-implication",
+    "term": "implication"
+  },
+  {
+    "id": "finance-rationale",
+    "term": "rationale"
+  },
+  {
+    "id": "finance-recommend",
+    "term": "recommend"
+  },
+  {
+    "id": "finance-feasible",
+    "term": "feasible"
+  },
+  {
+    "id": "finance-constraint",
+    "term": "constraint"
+  },
+  {
+    "id": "finance-challenge",
+    "term": "challenge"
+  },
+  {
+    "id": "finance-constructive",
+    "term": "constructive"
+  },
+  {
+    "id": "finance-alternative",
+    "term": "alternative"
+  },
+  {
+    "id": "finance-align",
+    "term": "align"
+  },
+  {
+    "id": "finance-commitment",
+    "term": "commitment"
+  },
+  {
+    "id": "finance-ownership",
+    "term": "ownership"
+  },
+  {
+    "id": "finance-concise",
+    "term": "concise"
+  },
+  {
+    "id": "finance-caveat",
+    "term": "caveat"
+  },
+  {
+    "id": "finance-decision-ready",
+    "term": "decision-ready"
+  },
+  {
+    "id": "finance-perspective",
+    "term": "perspective"
+  },
+  {
+    "id": "finance-conclusion",
+    "term": "conclusion"
+  },
+  {
+    "id": "finance-anticipate",
+    "term": "anticipate"
+  },
+  {
+    "id": "finance-exposure",
+    "term": "exposure"
+  },
+  {
+    "id": "finance-safeguard",
+    "term": "safeguard"
+  },
+  {
+    "id": "finance-credible",
+    "term": "credible"
+  },
+  {
+    "id": "finance-balanced",
+    "term": "balanced"
+  },
+  {
+    "id": "finance-explicit",
+    "term": "explicit"
+  },
+  {
+    "id": "finance-salient",
+    "term": "salient"
+  },
+  {
+    "id": "finance-priority",
+    "term": "priority"
+  },
+  {
+    "id": "finance-endorse",
+    "term": "endorse"
+  },
+  {
+    "id": "finance-follow-through",
+    "term": "follow-through"
+  },
+  {
+    "id": "finance-evaluate",
+    "term": "evaluate"
+  },
+  {
+    "id": "finance-reconcile",
+    "term": "reconcile"
+  },
+  {
+    "id": "finance-variance",
+    "term": "variance"
+  },
+  {
+    "id": "finance-accrue",
+    "term": "accrue"
+  },
+  {
+    "id": "finance-material",
+    "term": "material"
+  },
+  {
+    "id": "finance-substantiate",
+    "term": "substantiate"
+  },
+  {
+    "id": "finance-run-rate",
+    "term": "run rate"
+  },
+  {
+    "id": "finance-liquidity",
+    "term": "liquidity"
+  },
+  {
+    "id": "finance-provision",
+    "term": "provision"
+  },
+  {
+    "id": "project-prioritise",
+    "term": "prioritise"
+  },
+  {
+    "id": "project-scope",
+    "term": "scope"
+  },
+  {
+    "id": "project-trade-off",
+    "term": "trade-off"
+  },
+  {
+    "id": "project-dependency",
+    "term": "dependency"
+  },
+  {
+    "id": "project-milestone",
+    "term": "milestone"
+  },
+  {
+    "id": "project-viable",
+    "term": "viable"
+  },
+  {
+    "id": "project-iterate",
+    "term": "iterate"
+  },
+  {
+    "id": "project-roadmap",
+    "term": "roadmap"
+  },
+  {
+    "id": "technology-scalable",
+    "term": "scalable"
+  },
+  {
+    "id": "technology-resilient",
+    "term": "resilient"
+  },
+  {
+    "id": "technology-deprecate",
+    "term": "deprecate"
+  },
+  {
+    "id": "technology-refactor",
+    "term": "refactor"
+  },
+  {
+    "id": "technology-bottleneck",
+    "term": "bottleneck"
+  },
+  {
+    "id": "technology-latency",
+    "term": "latency"
+  },
+  {
+    "id": "technology-idempotent",
+    "term": "idempotent"
+  },
+  {
+    "id": "technology-rollback",
+    "term": "rollback"
+  },
+  {
+    "id": "sales-qualify",
+    "term": "qualify"
+  },
+  {
+    "id": "sales-prospect",
+    "term": "prospect"
+  },
+  {
+    "id": "sales-value-proposition",
+    "term": "value proposition"
+  },
+  {
+    "id": "sales-objection",
+    "term": "objection"
+  },
+  {
+    "id": "sales-conversion",
+    "term": "conversion"
+  },
+  {
+    "id": "sales-pipeline",
+    "term": "pipeline"
+  },
+  {
+    "id": "sales-retention",
+    "term": "retention"
+  },
+  {
+    "id": "sales-upsell",
+    "term": "upsell"
+  },
+  {
+    "id": "people-onboarding",
+    "term": "onboarding"
+  },
+  {
+    "id": "people-attrition",
+    "term": "attrition"
+  },
+  {
+    "id": "people-psychological-safety",
+    "term": "psychological safety"
+  },
+  {
+    "id": "people-equitable",
+    "term": "equitable"
+  },
+  {
+    "id": "people-mediate",
+    "term": "mediate"
+  },
+  {
+    "id": "people-developmental-feedback",
+    "term": "developmental feedback"
+  },
+  {
+    "id": "people-succession-planning",
+    "term": "succession planning"
+  },
+  {
+    "id": "people-engagement",
+    "term": "engagement"
+  },
+  {
+    "id": "consulting-hypothesis",
+    "term": "hypothesis"
+  },
+  {
+    "id": "consulting-synthesise",
+    "term": "synthesise"
+  },
+  {
+    "id": "consulting-benchmark",
+    "term": "benchmark"
+  },
+  {
+    "id": "consulting-workstream",
+    "term": "workstream"
+  },
+  {
+    "id": "consulting-actionable",
+    "term": "actionable"
+  },
+  {
+    "id": "consulting-triangulate",
+    "term": "triangulate"
+  },
+  {
+    "id": "consulting-operating-model",
+    "term": "operating model"
+  },
+  {
+    "id": "consulting-executive-summary",
+    "term": "executive summary"
+  },
+  {
+    "id": "operations-throughput",
+    "term": "throughput"
+  },
+  {
+    "id": "operations-lead-time",
+    "term": "lead time"
+  },
+  {
+    "id": "operations-capacity",
+    "term": "capacity"
+  },
+  {
+    "id": "operations-contingency",
+    "term": "contingency"
+  },
+  {
+    "id": "operations-inventory-turnover",
+    "term": "inventory turnover"
+  },
+  {
+    "id": "operations-fulfilment",
+    "term": "fulfilment"
+  },
+  {
+    "id": "operations-expedite",
+    "term": "expedite"
+  },
+  {
+    "id": "operations-service-level",
+    "term": "service level"
+  },
+  {
+    "id": "healthcare-triage",
+    "term": "triage"
+  },
+  {
+    "id": "healthcare-prognosis",
+    "term": "prognosis"
+  },
+  {
+    "id": "healthcare-contraindication",
+    "term": "contraindication"
+  },
+  {
+    "id": "healthcare-adherence",
+    "term": "adherence"
+  },
+  {
+    "id": "healthcare-escalation",
+    "term": "escalation"
+  },
+  {
+    "id": "healthcare-informed-consent",
+    "term": "informed consent"
+  },
+  {
+    "id": "healthcare-continuity-of-care",
+    "term": "continuity of care"
+  },
+  {
+    "id": "healthcare-differential-diagnosis",
+    "term": "differential diagnosis"
+  }
+]

@@ -66,14 +66,31 @@ test("Review uses current-role scope, one card, matching counts, and an explicit
   assert.match(await source("ExperienceViews"), /store.currentRoleDueWords.count/);
 });
 
-test("review explains its irreversible recall gate and recording blocks completion", async () => {
+test("review retains recall gate while daily writing is optional and recording blocks editing", async () => {
   const review = await source("SecondaryViews");
   const root = await source("RootView");
   assert.match(review, /workplace sentence of at least five words before you reveal/);
   assert.match(review, /\.disabled\(answerWordCount < 5\)/);
-  assert.match(root, /\.disabled\(completed \|\| coach.isListening \|\| coach.requestingAccess/);
   assert.match(root, /\.disabled\(coach.isListening \|\| coach.requestingAccess/);
   assert.match(root, /Cancel microphone request/);
+  assert.match(root, /if store.lessonProgress >= 1 \{ OptionalStretchSection\(\) \}/);
+  assert.doesNotMatch(root, /Save my practice|practice\.save/);
+});
+
+test("daily tap answers save before Continue and provide pause, skip and separate bookmarks", async () => {
+  const root = await source("RootView");
+  const challenges = await source("PracticeChallenges");
+  assert.match(root, /store.answerPractice\(challenge, choiceId: option.id\)/);
+  assert.match(root, /if store.continuePractice\(challenge\) \{ onContinue\(\) \}/);
+  assert.match(root, /\.disabled\(store.hasUnsavedChanges\)/);
+  for (const id of ["pause", "skip", "hint", "continue"]) assert.ok(root.includes(`practice.${id}`));
+  assert.match(root, /"Bookmarked" : "Bookmark"/);
+  assert.match(root, /else if store.isTodayComplete \{\s*store.openHome\(\)\s*\} else if store.completeToday\(\) \{\s*showCelebration = true/);
+  assert.match(root, /store.isCurrentPlanComplete && store.isTodayComplete \? "Back to Home" : "Continue"/);
+  assert.match(root, /\.contentShape\(Rectangle\(\)\)[\s\S]*?practice\.choice/);
+  assert.ok(root.includes('Text(hasSeenAnswer ? word.term : "Word \\(index + 1)")'));
+  assert.match(challenges, /productive: false/);
+  assert.match(challenges, /return !hasUnsavedChanges/);
 });
 
 test("email availability and recovery states do not advertise a working signup flow", async () => {

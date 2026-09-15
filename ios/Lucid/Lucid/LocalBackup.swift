@@ -48,8 +48,39 @@ extension LearningStore {
                   profile.goalIds.allSatisfy({ id in catalog.goals.contains { $0.id == id } }) else { throw LucidBackupDocument.BackupError.invalid }
         }
         var merged = LearningMerge.restoringBackup(local: data, incoming: incoming, restoreProfile: restoreProfile)
+        // An updated course can invalidate the local draft without invalidating a
+        // matching backup. Compare against the current authored question set.
+        for path in catalog.learningPaths ?? [] {
+            let own = data.courseCheckDrafts?[path.roleId]
+            if let saved = incoming.courseCheckDrafts?[path.roleId], saved.matches(path),
+               own == nil || own?.matches(path) == false || own?.answers.isEmpty == true {
+                var drafts = merged.courseCheckDrafts ?? [:]
+                drafts[path.roleId] = saved
+                merged.courseCheckDrafts = drafts
+            }
+        }
         if restoreProfile, incoming.profile != nil { merged.profileUpdatedAt = clock() }
         merged = normalizedDailyPlan(merged, at: clock())
+        // A valid backup may repair a stale question draft without resetting earned history.
+        for (roleId, plan) in merged.dailyRolePlans ?? [:] where plan.dayKey == clock().lucidDayKey {
+            var validationRecord = merged
+            validationRecord.profile?.roleId = roleId
+            validationRecord.currentWordIds = plan.wordIds
+            validationRecord.lessonDayKey = plan.dayKey
+            for wordId in plan.wordIds {
+                guard let challenge = practiceChallenge(for: wordId, record: validationRecord),
+                      let saved = incoming.tapPracticeAttempts?[challenge.key], saved.signature == challenge.signature,
+                      saved.choices.count <= 12,
+                      saved.choices.allSatisfy({ id in challenge.options.contains { $0.id == id } }) else { continue }
+                let own = merged.tapPracticeAttempts?[challenge.key]
+                let ownValid = own?.signature == challenge.signature && (own?.choices.count ?? 0) <= 12
+                    && own?.choices.allSatisfy({ id in challenge.options.contains { $0.id == id } }) == true
+                if !ownValid {
+                    var attempts = merged.tapPracticeAttempts ?? [:]; attempts[challenge.key] = saved
+                    merged.tapPracticeAttempts = attempts
+                }
+            }
+        }
         let recovering = storageBlocked
         if recovering { _ = try persistence.archiveForRecovery(scope: scope) }
         try persistence.save(merged, scope: scope)

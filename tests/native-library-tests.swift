@@ -78,11 +78,11 @@ func libraryCheck(_ condition: @autoclosure () throws -> Bool, _ message: String
             }),
             ("search uses the displayed Consulting meaning of shared material rather than its Finance base meaning", {
                 let (store, _) = try makeStore(catalog, today, initial(consulting))
-                let matches = store.libraryWords(includeOtherRoles: false, search: "recommendation")
+                let matches = store.libraryWords(includeOtherRoles: false, search: "judgement")
                 guard let displayed = matches.first(where: { $0.id == material.id }) else { throw LibraryTestFailure(description: "Consulting meaning search could not find material") }
                 try libraryCheck(displayed.meaning == material.roleContexts?[consulting.id]?.meaning, "Search result showed the Finance definition to Consulting")
                 try libraryCheck(!store.libraryWords(includeOtherRoles: false, search: "financial decision").contains { $0.id == material.id }, "Consulting search matched hidden Finance copy instead of displayed meaning")
-                try libraryCheck(store.libraryWords(includeOtherRoles: true, search: "recommendation").contains { $0.id == material.id }, "All-role opt-in removed the current role's contextualized search")
+                try libraryCheck(store.libraryWords(includeOtherRoles: true, search: "judgement").contains { $0.id == material.id }, "All-role opt-in removed the current role's contextualized search")
                 store.finishOnboarding(profile: profile(finance))
                 try libraryCheck(store.libraryWords(includeOtherRoles: false, search: "financial decision").contains { $0.id == material.id && $0.meaning == material.meaning }, "Switching back to Finance retained Consulting search context")
             }),

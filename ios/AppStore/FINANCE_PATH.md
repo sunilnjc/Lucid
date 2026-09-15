@@ -23,10 +23,10 @@ This is a professional-English curriculum, not accounting training or advice. Ea
 
 ## Content and scope
 
-The canonical source is `lib/professional-content.ts`; `npm run ios:content` exports the catalogue and path to the native resource. All 11 existing Finance-active entries are preserved, with 79 new entries. Other roles keep smaller starter collections and do not yet have equivalent 30-lesson paths.
+The canonical source is `lib/professional-content.ts`; `npm run ios:content` exports the catalogue and paths to the native resource. All 11 original Finance-active entries are preserved, with 79 additional Finance entries. All eight roles now have equivalent 90-word, 30-lesson paths and an optional starting-point check. See [PROFESSIONAL_COURSES.md](PROFESSIONAL_COURSES.md).
 
 The independent editorial pass corrected nine fields across six lessons. A real Finance professional and a small learner pilot should still assess language usefulness, challenge clarity, difficulty and actual workplace transfer before public launch. Pattern matching is not an assessment of grammar or meaning.
 
 ## Accounts
 
-Learning works locally without an account. Supabase development storage is connected and security-tested, but email code delivery is not configured. The development account screen explains this and cannot send a code yet. See `AUTH_SETUP.md` for the free-service setup and remaining launch gates.
+Learning works locally without an account. Supabase development storage and Resend email delivery are connected for the private Debug preview; Release authentication remains disabled. See `AUTH_SETUP.md` for the free-service setup and remaining launch gates.

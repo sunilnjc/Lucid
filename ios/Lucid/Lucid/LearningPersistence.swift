@@ -177,6 +177,17 @@ enum LearningMerge {
             result.profileUpdatedAt = remote.profileUpdatedAt
         }
         result.introducedWordIds = Array(Set(local.introducedWordIds + remote.introducedWordIds)).sorted()
+        var placements = local.pathPlacements ?? [:]
+        for (roleId, incoming) in remote.pathPlacements ?? [:] {
+            if let own = placements[roleId] {
+                let ownTie = own.pathId + "|" + own.startingModuleId
+                let incomingTie = incoming.pathId + "|" + incoming.startingModuleId
+                if incoming.checkedAt > own.checkedAt || (incoming.checkedAt == own.checkedAt && incomingTie > ownTie) {
+                    placements[roleId] = incoming
+                }
+            } else { placements[roleId] = incoming }
+        }
+        result.pathPlacements = placements.isEmpty ? nil : placements
         var events = Dictionary((local.activities ?? []).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         for event in remote.activities ?? [] { events[event.id] = event }
         result.activities = events.values.sorted { $0.date == $1.date ? $0.id.uuidString < $1.id.uuidString : $0.date < $1.date }
@@ -282,6 +293,15 @@ enum LearningMerge {
             // A revealed hint must not turn into independent recall after restoring a backup.
             !saved.independent ? saved : existing
         }
+        result.courseCheckDrafts = (incoming.courseCheckDrafts ?? [:]).merging(local.courseCheckDrafts ?? [:]) { saved, existing in
+            existing.answers.isEmpty ? saved : existing
+        }
+        result.tapPracticeAttempts = (incoming.tapPracticeAttempts ?? [:]).merging(local.tapPracticeAttempts ?? [:]) { saved, existing in
+            existing.choices.isEmpty && !existing.revealed ? saved : existing
+        }
+        result.practiceCursors = (incoming.practiceCursors ?? [:]).merging(local.practiceCursors ?? [:]) { saved, existing in
+            saved.dayKey > existing.dayKey ? saved : existing
+        }
         return result
     }
 
@@ -290,6 +310,9 @@ enum LearningMerge {
         result.schemaVersion = 2
         result.practiceDrafts = nil
         result.reviewAttempts = nil
+        result.courseCheckDrafts = nil
+        result.tapPracticeAttempts = nil
+        result.practiceCursors = nil
         result.lessonRoleId = nil
         result.dailyRolePlans = nil
         result.settings = AppSettings()

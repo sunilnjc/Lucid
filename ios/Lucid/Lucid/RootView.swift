@@ -367,7 +367,7 @@ struct OnboardingView: View {
                             .foregroundStyle(.white.opacity(0.68))
                     }
 
-                    OnboardingSection(number: "02", title: "Your level") {
+                    OnboardingSection(number: "02", title: "Your career stage") {
                         Picker("Seniority", selection: $seniorityId) {
                             ForEach(catalog.seniorityLevels) { level in Text(level.label).tag(level.id) }
                         }
@@ -378,6 +378,8 @@ struct OnboardingView: View {
                                 .font(.subheadline)
                                 .foregroundStyle(.white.opacity(0.68))
                         }
+                        Text("This describes your work, not your English ability. After setup, a short starting-point check can help you choose where to begin your course.")
+                            .font(.footnote).foregroundStyle(LucidColour.secondaryOnDark)
                     }
 
                     OnboardingSection(number: "03", title: "Daily situations") {
@@ -539,11 +541,10 @@ struct BrandHeader: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            Text("L")
-                .font(.system(size: 25, weight: .bold, design: .serif).italic())
-                .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .background(LucidColour.teal, in: UnevenRoundedRectangle(topLeadingRadius: 22, bottomLeadingRadius: 8, bottomTrailingRadius: 22, topTrailingRadius: 22))
+            Image("LucidMark").resizable().scaledToFit()
+                .frame(width: 54, height: 54)
+                .clipShape(RoundedRectangle(cornerRadius: 14))
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 0) {
                 Text("Lucid")
                     .font(.system(.title2, design: .serif, weight: .bold))
@@ -574,7 +575,6 @@ struct TodayView: View {
                     VStack(alignment: .leading, spacing: 20) {
                         PracticeStatusBanner()
                         PracticeDashboard()
-                        LearningPathSummary()
                         if !store.currentRoleDueWords.isEmpty {
                             Button(action: store.openReview) {
                                 HStack {
@@ -593,19 +593,24 @@ struct TodayView: View {
                         } else {
                             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: dynamicTypeSize.isAccessibilitySize ? 1 : store.todayWords.count), spacing: 10) {
                                 ForEach(Array(store.todayWords.enumerated()), id: \.element.id) { index, word in
+                                    let hasSeenAnswer = store.data.completedWordIdsToday.contains(word.id)
+                                        || store.practiceChallenge(for: word.id).flatMap { store.tapAttempt(for: $0) }?.revealed == true
                                     Button {
-                                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { selectedWordIndex = index }
+                                        if store.focusPracticeWord(word.id) {
+                                            withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.2)) { selectedWordIndex = index }
+                                        }
                                     } label: {
                                         VStack(spacing: 6) {
                                             Image(systemName: store.data.completedWordIdsToday.contains(word.id) ? "checkmark.circle.fill" : "\(index + 1).circle")
-                                            Text(word.term).font(.subheadline.weight(.semibold))
+                                            Text(hasSeenAnswer ? word.term : "Word \(index + 1)").font(.subheadline.weight(.semibold))
                                                 .fixedSize(horizontal: false, vertical: true)
                                         }.frame(maxWidth: .infinity, minHeight: 64).padding(8)
                                             .background(selectedWordIndex == index ? LucidColour.raisedSurface : LucidColour.surface, in: RoundedRectangle(cornerRadius: 16))
                                             .overlay(RoundedRectangle(cornerRadius: 16).stroke(selectedWordIndex == index ? LucidColour.mint : .clear))
+                                            .contentShape(Rectangle())
                                     }
                                     .buttonStyle(.plain).foregroundStyle(LucidColour.textOnDark)
-                                    .accessibilityLabel("Word \(index + 1): \(word.term)")
+                                    .accessibilityLabel(hasSeenAnswer ? "Word \(index + 1): \(word.term)" : "Word \(index + 1)")
                                     .accessibilityValue(store.data.completedWordIdsToday.contains(word.id) ? "Practised" : "Ready to practise")
                                     .accessibilityAddTraits(selectedWordIndex == index ? .isSelected : [])
                                 }
@@ -617,21 +622,34 @@ struct TodayView: View {
                                     Label(lesson.title, systemImage: "map").font(.subheadline).foregroundStyle(LucidColour.mint)
                                 }.frame(minHeight: 44)
                             }
-                            WordLearningCard(word: word, number: safeIndex + 1)
-                                .id("\(store.profile?.roleId ?? "")-\(store.data.lessonDayKey ?? "")-\(word.id)")
-                            if store.data.completedWordIdsToday.contains(word.id), let next = store.todayWords.firstIndex(where: { !store.data.completedWordIdsToday.contains($0.id) }) {
-                                Button {
-                                    selectedWordIndex = next
-                                    withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) { proxy.scrollTo("wordSteps", anchor: .top) }
-                                } label: {
-                                    Text("Continue to \(store.todayWords[next].term)").frame(maxWidth: .infinity, minHeight: 52)
-                                }.buttonStyle(.borderedProminent).tint(LucidColour.mint).foregroundStyle(LucidColour.midnight)
-                            }
+                            WordLearningCard(word: word, number: safeIndex + 1, onContinue: {
+                                if let next = store.todayWords.firstIndex(where: { !store.data.completedWordIdsToday.contains($0.id) }) {
+                                    if store.focusPracticeWord(store.todayWords[next].id) {
+                                        selectedWordIndex = next
+                                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) { proxy.scrollTo("wordSteps", anchor: .top) }
+                                    }
+                                } else if store.isTodayComplete {
+                                    store.openHome()
+                                } else if store.completeToday() {
+                                    showCelebration = true
+                                }
+                            }, onSkip: {
+                                let remaining = store.todayWords.indices.filter { $0 != safeIndex && !store.data.completedWordIdsToday.contains(store.todayWords[$0].id) }
+                                if let next = remaining.first(where: { $0 > safeIndex }) ?? remaining.first {
+                                    if store.focusPracticeWord(store.todayWords[next].id) {
+                                        selectedWordIndex = next
+                                        withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) { proxy.scrollTo("wordSteps", anchor: .top) }
+                                    }
+                                } else if store.focusPracticeWord(word.id) { store.openHome() }
+                            }, onPause: {
+                                if store.focusPracticeWord(word.id) { store.openHome() }
+                            })
+                                .id("\(store.practiceAccountToken)-\(store.profile?.roleId ?? "")-\(store.data.lessonDayKey ?? "")-\(word.id)")
                             if store.isTodayComplete {
                                 Label(store.isCurrentPlanComplete ? "Current practice complete · Daily bonus earned" : "Daily bonus earned · Continue with the words above", systemImage: "checkmark.seal.fill")
                                     .font(.subheadline).foregroundStyle(LucidColour.mint)
                                     .frame(maxWidth: .infinity, alignment: .leading).padding(16)
-                            } else {
+                            } else if store.lessonProgress >= 1 {
                             Button {
                                 if store.completeToday() {
                                     showCelebration = true
@@ -648,7 +666,9 @@ struct TodayView: View {
                             .accessibilityIdentifier("lesson.complete")
                             .sensoryFeedback(.success, trigger: showCelebration)
                             }
+                            if store.lessonProgress >= 1 { OptionalStretchSection() }
                         }
+                        LearningPathSummary()
                         WeeklyPracticeView()
                     }
                     .padding(18).frame(maxWidth: 720).frame(maxWidth: .infinity)
@@ -670,7 +690,7 @@ struct TodayView: View {
     }
 
     private func selectNextUnfinishedWord() {
-        selectedWordIndex = store.todayWords.firstIndex { !store.data.completedWordIdsToday.contains($0.id) } ?? 0
+        selectedWordIndex = store.todayWords.firstIndex { $0.id == store.practiceResumeWordId } ?? 0
     }
 }
 
@@ -713,113 +733,245 @@ struct WordLearningCard: View {
     @Environment(\.scenePhase) private var scenePhase
     let word: ProfessionalWord
     let number: Int
+    let onContinue: () -> Void
+    let onSkip: () -> Void
+    let onPause: () -> Void
     @StateObject private var player = SpeechPlayer()
-    @StateObject private var coach = SpeechCoach()
-    @State private var result: UsageResult?
     @State private var showDetails = false
-    @State private var transcriptBase = ""
+    @AccessibilityFocusState private var feedbackFocused: Bool
     private var completed: Bool { store.data.completedWordIdsToday.contains(word.id) }
-    private var draft: Binding<String> {
-        Binding(get: { store.draft(for: word.id) }, set: { store.saveDraft($0, wordId: word.id) })
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack {
-                Text("WORD \(String(format: "%02d", number))").font(.caption.weight(.bold)).tracking(1)
+                Text("QUICK CHALLENGE \(number)").font(.caption.weight(.bold)).tracking(1)
                     .foregroundStyle(LucidColour.mint)
                 Spacer()
-                if completed { Label("+10 XP", systemImage: "checkmark.circle.fill").font(.subheadline.bold()).foregroundStyle(LucidColour.mint) }
+                Button(action: onPause) { Text("Pause").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }
+                    .accessibilityIdentifier("practice.pause")
             }
-            VStack(alignment: .leading, spacing: 8) {
+            if let challenge = store.practiceChallenge(for: word.id) {
+                challengeBody(challenge)
+            } else {
+                Text("This challenge could not be loaded. Your progress is safe. Try another card or come back later.")
+                Button(action: onSkip) { Text("Skip for now").frame(minHeight: 44).contentShape(Rectangle()) }
+            }
+        }
+        .padding(22).foregroundStyle(LucidColour.textOnDark)
+        .background(LucidColour.surface, in: RoundedRectangle(cornerRadius: 24))
+        .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.12)))
+        .onChange(of: scenePhase) { _, phase in if phase != .active { player.stop() } }
+        .onDisappear { player.stop() }
+    }
+
+    @ViewBuilder private func challengeBody(_ challenge: PracticeChallenge) -> some View {
+        let attempt = store.tapAttempt(for: challenge)
+        let revealed = attempt?.revealed == true
+        let answered = completed || revealed
+        if store.challengeWasUpdated(challenge), !completed {
+            Text("This question has been refreshed. Your learning history is unchanged.")
+                .font(.footnote).foregroundStyle(LucidColour.secondaryOnDark)
+        }
+        if !answered {
+            Text(challenge.prompt).font(.system(.title, design: .serif))
+                .fixedSize(horizontal: false, vertical: true).accessibilityAddTraits(.isHeader)
+            Text(challenge.context).font(.body).lineSpacing(4)
+            Text("Tap an answer · It saves automatically").font(.footnote).foregroundStyle(LucidColour.secondaryOnDark)
+            VStack(spacing: 10) {
+                ForEach(challenge.options) { option in
+                    let selected = attempt?.choices.last == option.id
+                    Button {
+                        if store.answerPractice(challenge, choiceId: option.id) {
+                            feedbackFocused = true
+                            LucidAccessibility.announce(option.id == challenge.correctId ? "Correct. Practice saved." : "Not quite. " + option.explanation + " Try another answer.")
+                        }
+                    } label: {
+                        HStack(alignment: .top, spacing: 12) {
+                            Image(systemName: selected ? "arrow.uturn.backward.circle" : "circle")
+                                .foregroundStyle(selected ? LucidColour.coral : LucidColour.mint)
+                            Text(option.text).font(.body.weight(.medium)).multilineTextAlignment(.leading)
+                                .fixedSize(horizontal: false, vertical: true)
+                            Spacer(minLength: 0)
+                        }.padding(16).frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
+                            .background(LucidColour.raisedSurface, in: RoundedRectangle(cornerRadius: 16))
+                            .overlay(RoundedRectangle(cornerRadius: 16).stroke(selected ? LucidColour.coral : .white.opacity(0.12)))
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(store.hasUnsavedChanges || selected)
+                    .accessibilityIdentifier("practice.choice.\(option.id)")
+                    .accessibilityHint(selected ? "Already tried. Choose another answer or get help." : "Checks and saves your answer.")
+                }
+            }
+            if let chosen = attempt?.choices.last, let option = challenge.options.first(where: { $0.id == chosen }) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("Not quite — try another", systemImage: "arrow.uturn.backward").font(.headline)
+                    Text(option.explanation).font(.subheadline)
+                }
+                .foregroundStyle(LucidColour.textOnDark).padding(16)
+                .background(LucidColour.raisedSurface, in: RoundedRectangle(cornerRadius: 16))
+                .accessibilityElement(children: .combine).accessibilityFocused($feedbackFocused)
+                .accessibilityIdentifier("practice.feedback")
+            }
+            Button {
+                if store.revealPractice(challenge) { feedbackFocused = true }
+            } label: { Text("Help me learn this").frame(minHeight: 44).contentShape(Rectangle()) }
+                .disabled(store.hasUnsavedChanges)
+                .accessibilityIdentifier("practice.hint")
+            Button(action: onSkip) { Text("Skip for now").frame(minHeight: 44).contentShape(Rectangle()) }
+                .accessibilityIdentifier("practice.skip")
+            Text("Skipping keeps this word unfinished. Pause returns Home; you can pick up where you left off.")
+                .font(.footnote).foregroundStyle(LucidColour.secondaryOnDark)
+        } else {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(store.hasUnsavedChanges ? "Waiting to save" : (completed ? "Practice saved · +10 XP" : "Let’s learn it together"),
+                      systemImage: store.hasUnsavedChanges ? "externaldrive.badge.exclamationmark" : (completed ? "checkmark.circle.fill" : "lightbulb"))
+                    .font(.headline).foregroundStyle(LucidColour.mint)
                 Text(word.term).font(.system(.largeTitle, design: .serif))
                     .fixedSize(horizontal: false, vertical: true)
-                Text("\(word.partOfSpeech.uppercased()) · \(word.pronunciation)")
-                    .font(.subheadline).foregroundStyle(LucidColour.secondaryOnDark)
+                Text(challenge.explanation).font(.body).lineSpacing(4)
+                Text(completed ? "This is guided practice. Your next scheduled review will check recall." : "Read the explanation, then Continue to complete guided practice.")
+                    .font(.footnote).foregroundStyle(LucidColour.secondaryOnDark)
             }
-            HStack(spacing: 16) {
-                Button {
-                    coach.stop()
-                    player.speak("\(word.term). \(word.example)", rate: store.data.settings.speechRate)
-                } label: { Label("Listen", systemImage: "speaker.wave.2.fill").frame(minHeight: 44) }
-                    .accessibilityLabel("Hear \(word.term) and its example")
-                Spacer()
-                Button { store.toggleFavourite(word.id) } label: {
-                    Label(store.isFavourite(word.id) ? "Saved" : "Save", systemImage: store.isFavourite(word.id) ? "bookmark.fill" : "bookmark")
-                        .frame(minHeight: 44)
-                }
-                .accessibilityLabel(store.isFavourite(word.id) ? "Remove \(word.term) from saved words" : "Save \(word.term)")
-            }.buttonStyle(.bordered).tint(LucidColour.mint)
-            Text(word.meaning).font(.title3).lineSpacing(4)
-            CardDetail(label: "AT WORK", text: word.example)
-            DisclosureGroup("Natural pairings & context", isExpanded: $showDetails) {
+            .accessibilityElement(children: .combine).accessibilityFocused($feedbackFocused)
+            Button {
+                player.stop()
+                if store.continuePractice(challenge) { onContinue() }
+            } label: {
+                Label(store.isCurrentPlanComplete && store.isTodayComplete ? "Back to Home" : "Continue", systemImage: "arrow.right").font(.headline)
+                    .frame(maxWidth: .infinity, minHeight: 54)
+            }
+            .buttonStyle(.borderedProminent).tint(LucidColour.mint).foregroundStyle(LucidColour.midnight)
+            .disabled(store.hasUnsavedChanges)
+            .accessibilityIdentifier("practice.continue")
+            .sensoryFeedback(.success, trigger: completed && !store.hasUnsavedChanges)
+            ViewThatFits(in: .horizontal) {
+                HStack { listenButton; bookmarkButton }
+                VStack(alignment: .leading) { listenButton; bookmarkButton }
+            }
+            DisclosureGroup("Explore this word", isExpanded: $showDetails) {
                 VStack(alignment: .leading, spacing: 16) {
+                    Text("\(word.partOfSpeech) · \(word.pronunciation)").font(.subheadline)
+                    CardDetail(label: "AT WORK", text: word.example)
                     CardDetail(label: "NATURAL PAIRINGS", text: word.collocations.joined(separator: " · "))
                     CardDetail(label: "WHEN IT HELPS", text: word.whenToUse)
                     CardDetail(label: "AVOID", text: word.avoidOrMisuse)
                 }.padding(.top, 14)
             }.font(.headline)
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Your turn").font(.title3.bold())
-                Text(word.mission).font(.body).foregroundStyle(LucidColour.secondaryOnDark)
-                TextEditor(text: draft)
-                    .disabled(coach.isListening || coach.requestingAccess)
-                    .frame(minHeight: 112).padding(8).scrollContentBackground(.hidden)
-                    .background(LucidColour.midnight, in: RoundedRectangle(cornerRadius: 14))
-                    .overlay(RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.14)))
-                    .accessibilityLabel("A professional sentence using \(word.term)")
-                    .accessibilityIdentifier("practice.sentence")
-                Text(coach.isListening || coach.requestingAccess ? "Stop recording to edit your sentence. Your earlier text stays saved." : "Use “\(word.term)” in at least five words. Keep workplace details fictional.")
-                    .font(.footnote).foregroundStyle(LucidColour.secondaryOnDark)
-                ViewThatFits(in: .horizontal) {
-                    HStack { speechButton; checkButton }
-                    VStack(alignment: .leading) { speechButton; checkButton }
-                }
-                Text(coach.status).font(.footnote).foregroundStyle(LucidColour.secondaryOnDark)
-                Text("Dictation uses Apple speech recognition and may process audio online. You can always type instead.")
-                    .font(.caption).foregroundStyle(LucidColour.secondaryOnDark)
-                if let result { UsageFeedbackView(result: result) }
-            }
-            Button { _ = store.markTodayWord(word.id, quality: .good) } label: {
-                Label(completed ? "Practised · review tomorrow" : "Save my practice · +10 XP", systemImage: completed ? "checkmark.circle.fill" : "checkmark")
-                    .font(.headline).frame(maxWidth: .infinity, minHeight: 52)
-            }
-            .buttonStyle(.borderedProminent).tint(LucidColour.mint).foregroundStyle(LucidColour.midnight)
-            .disabled(completed || coach.isListening || coach.requestingAccess || !store.hasPracticeContext(draft.wrappedValue, for: word))
-            .accessibilityHint("Saves your guided practice. Independent recall is checked during spaced review.")
-            .accessibilityIdentifier("practice.save")
-            .sensoryFeedback(.success, trigger: completed)
         }
-        .padding(22).foregroundStyle(LucidColour.textOnDark)
-        .background(LucidColour.surface, in: RoundedRectangle(cornerRadius: 24))
-        .overlay(RoundedRectangle(cornerRadius: 24).stroke(.white.opacity(0.12)))
+    }
+
+    private var listenButton: some View {
+        Button { player.speak("\(word.term). \(word.example)", rate: store.data.settings.speechRate) } label: {
+            Label("Listen", systemImage: "speaker.wave.2.fill").frame(minHeight: 44)
+        }.buttonStyle(.bordered).tint(LucidColour.mint)
+    }
+    private var bookmarkButton: some View {
+        Button { store.toggleFavourite(word.id) } label: {
+            Label(store.isFavourite(word.id) ? "Bookmarked" : "Bookmark", systemImage: store.isFavourite(word.id) ? "bookmark.fill" : "bookmark")
+                .frame(minHeight: 44)
+        }.buttonStyle(.bordered).tint(LucidColour.mint)
+            .accessibilityLabel(store.isFavourite(word.id) ? "Remove bookmark for \(word.term)" : "Bookmark \(word.term)")
+    }
+}
+
+struct OptionalStretchSection: View {
+    @EnvironmentObject private var store: LearningStore
+    @State private var selectedWordId = ""
+    @State private var expanded = false
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("One optional stretch").font(.title2.bold())
+            Text("Try one word in your own sentence. Your daily practice is already saved.")
+                .font(.body).foregroundStyle(LucidColour.secondaryOnDark)
+            Button(expanded ? "Close the stretch" : "Try it in my own words") { expanded.toggle() }
+                .buttonStyle(.bordered).frame(minHeight: 44)
+            if expanded {
+                Picker("Choose a word", selection: $selectedWordId) {
+                    ForEach(store.todayWords) { Text($0.term).tag($0.id) }
+                }.pickerStyle(.menu)
+                if let word = store.todayWords.first(where: { $0.id == selectedWordId }) ?? store.todayWords.first {
+                    OptionalSentencePractice(word: word).id(store.practiceAccountToken + (store.profile?.roleId ?? "") + word.id)
+                }
+            } else {
+                Text("No extra points or microphone needed. You can return to this later.")
+                    .font(.footnote).foregroundStyle(LucidColour.secondaryOnDark)
+            }
+        }.padding(22).foregroundStyle(LucidColour.textOnDark)
+            .background(LucidColour.surface, in: RoundedRectangle(cornerRadius: 24))
+            .onAppear { selectedWordId = store.todayWords.first?.id ?? "" }
+            .onChange(of: store.data.currentWordIds) { _, ids in selectedWordId = ids.first ?? "" }
+    }
+}
+
+struct OptionalSentencePractice: View {
+    @EnvironmentObject private var store: LearningStore
+    @Environment(\.scenePhase) private var scenePhase
+    let word: ProfessionalWord
+    @StateObject private var coach = SpeechCoach()
+    @State private var result: UsageResult?
+    @State private var transcriptBase = ""
+    @FocusState private var writingFocused: Bool
+    private var draft: Binding<String> {
+        Binding(get: { store.draft(for: word.id) }, set: { store.saveDraft($0, wordId: word.id) })
+    }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(word.mission).font(.body)
+            ViewThatFits(in: .horizontal) {
+                HStack { writeButton; speechButton; starterButton }
+                VStack(alignment: .leading) { writeButton; speechButton; starterButton }
+            }
+            TextEditor(text: draft).focused($writingFocused)
+                .disabled(coach.isListening || coach.requestingAccess)
+                .frame(minHeight: 112).padding(8).scrollContentBackground(.hidden)
+                .background(LucidColour.midnight, in: RoundedRectangle(cornerRadius: 14))
+                .overlay(RoundedRectangle(cornerRadius: 14).stroke(.white.opacity(0.14)))
+                .accessibilityLabel("An optional professional sentence using \(word.term)")
+                .accessibilityIdentifier("practice.sentence")
+            Text(store.hasUnsavedChanges ? "Waiting to save your sentence." : (draft.wrappedValue.isEmpty ? "Your writing saves on this device. Use fictional workplace details." : "Draft saved on this device. Use fictional workplace details."))
+                .font(.footnote).foregroundStyle(LucidColour.secondaryOnDark)
+            Button("Check my sentence") {
+                let checked = store.evaluate(sentence: draft.wrappedValue, for: word)
+                result = checked
+                LucidAccessibility.announce(checked.title + ". " + checked.suggestions.joined(separator: " "))
+            }.buttonStyle(.bordered).frame(minHeight: 44)
+                .disabled(coach.isListening || coach.requestingAccess || draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Text(coach.status).font(.footnote).foregroundStyle(LucidColour.secondaryOnDark)
+            Text("Optional dictation uses Apple speech recognition and may process audio online. Writing works without microphone access.")
+                .font(.footnote).foregroundStyle(LucidColour.secondaryOnDark)
+            if let result { UsageFeedbackView(result: result) }
+        }
         .onChange(of: draft.wrappedValue) { _, _ in result = nil }
         .onChange(of: coach.transcript) { _, transcript in
             if !transcript.isEmpty { store.saveDraft(transcriptBase + transcript, wordId: word.id) }
         }
-        .onChange(of: scenePhase) { _, phase in if phase != .active { coach.stop(); player.stop() } }
-        .onDisappear { coach.stop(); player.stop() }
+        .onChange(of: scenePhase) { _, phase in if phase != .active { coach.stop() } }
+        .onDisappear { coach.stop() }
+    }
+    private var writeButton: some View {
+        Button("Write") { coach.stop(); writingFocused = true }.buttonStyle(.bordered).frame(minHeight: 44)
     }
     private var speechButton: some View {
         Button {
-            if !coach.isListening {
-                player.stop()
-                transcriptBase = draft.wrappedValue.isEmpty ? "" : draft.wrappedValue + "\n"
-            }
+            writingFocused = false
+            if !coach.isListening { transcriptBase = draft.wrappedValue.isEmpty ? "" : draft.wrappedValue + "\n" }
             coach.toggle()
-        } label: { Label(coach.requestingAccess ? "Cancel microphone request" : (coach.isListening ? "Stop recording" : "Speak"), systemImage: coach.isListening || coach.requestingAccess ? "stop.circle.fill" : "mic.fill").frame(minHeight: 44) }
-            .buttonStyle(.bordered)
-    }
-    private var checkButton: some View {
-        Button {
-            let checked = store.evaluate(sentence: draft.wrappedValue, for: word)
-            result = checked
-            LucidAccessibility.announce(checked.title + ". " + checked.suggestions.joined(separator: " "))
         } label: {
-            Text("Check my sentence").frame(minHeight: 44)
-        }
-        .buttonStyle(.bordered)
-        .disabled(coach.isListening || coach.requestingAccess || draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Label(coach.requestingAccess ? "Cancel microphone request" : (coach.isListening ? "Stop recording" : "Speak"),
+                  systemImage: coach.isListening || coach.requestingAccess ? "stop.circle.fill" : "mic.fill")
+                .frame(minHeight: 44)
+        }.buttonStyle(.bordered)
+    }
+    private var starterButton: some View {
+        Button("Help me start") {
+            coach.stop()
+            // Never replace the learner’s existing writing.
+            if draft.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                store.saveDraft("In our next discussion, I can use “\(word.term)” to ", wordId: word.id)
+            }
+            writingFocused = true
+        }.buttonStyle(.bordered).frame(minHeight: 44)
     }
 }
 

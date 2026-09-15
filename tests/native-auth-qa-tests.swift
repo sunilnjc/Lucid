@@ -377,6 +377,9 @@ struct AuthQATests {
             let (store, _, _) = try fixture(catalogue, api)
             store.session = nil; store.scope = "guest"
             store.data.practiceDrafts = [catalogue.words[0].id: "Unrelated guest draft"]
+            let path = catalogue.learningPaths![0]
+            store.data.courseCheckDrafts = [path.roleId: CourseCheckDraft(pathId: path.id, answers: [1], questionSignature: CourseCheckDraft.signature(for: path.startingCheck!))]
+            store.data.pathPlacements = [path.roleId: PathPlacement(pathId: path.id, startingModuleId: path.modules[4].id, checkedAt: Date(), correctAnswers: 6, questionCount: 6)]
             let verifiedSession = try json(session)
             QAProtocol.configure { request in
                 switch request.url?.path {
@@ -389,6 +392,144 @@ struct AuthQATests {
             await quiesce(store)
             try check(verified, "Account switch failed")
             try check(store.data.practiceDrafts?[catalogue.words[0].id] != "Unrelated guest draft", "Same-account preservation leaked guest data")
+            try check(store.data.courseCheckDrafts == nil && store.data.pathPlacements == nil, "Unconsented account switch imported guest check data")
+        }
+        await run("guest tap answers and cursors never enter an account without import consent") {
+            let (store, persistence, _) = try fixture(catalogue, api, authenticated: false)
+            var account = store.normalizedDailyPlan(try persistence.load(scope: userID.uuidString).data, at: store.currentDate)
+            let accountChallenge = store.practiceChallenge(for: account.currentWordIds[0], record: account)!
+            let protectedAttempt = TapPracticeAttempt(signature: accountChallenge.signature,
+                choices: [accountChallenge.options.first { $0.id != accountChallenge.correctId }!.id], revealed: true)
+            let protectedCursor = PracticeCursor(dayKey: account.lessonDayKey!, wordId: account.currentWordIds[2])
+            account.tapPracticeAttempts = [accountChallenge.key: protectedAttempt]
+            account.practiceCursors = [account.profile!.roleId: protectedCursor]
+            try persistence.save(account, scope: userID.uuidString)
+            try check(store.finishOnboarding(profile: account.profile!), "Guest tap profile fixture failed")
+            let guestChallenge = store.practiceChallenge(for: store.data.currentWordIds[1])!
+            try check(store.answerPractice(guestChallenge,
+                choiceId: guestChallenge.options.first { $0.id != guestChallenge.correctId }!.id), "Guest tap fixture failed")
+            try check(store.focusPracticeWord(guestChallenge.wordId), "Guest cursor fixture failed")
+            let guestRecord = try persistence.load(scope: "guest").data
+            let verifiedSession = try json(session)
+            QAProtocol.configure { request in
+                switch request.url?.path {
+                case "/auth/v1/verify": return .init(body: verifiedSession)
+                case "/rest/v1/lucid_state": return .init(body: [])
+                default: return .init(failure: URLError(.notConnectedToInternet))
+                }
+            }
+            let verified = await store.verifyLogin(email: "learner@example.com", code: "123456", includeGuest: false)
+            await quiesce(store)
+            try check(verified && store.scope == userID.uuidString.lowercased(), "Account sign-in failed")
+            try check(store.data.tapPracticeAttempts == account.tapPracticeAttempts,
+                      "Unconsented sign-in imported guest answers or discarded protected account answers")
+            try check(store.data.practiceCursors == account.practiceCursors,
+                      "Unconsented sign-in imported the guest cursor or replaced the protected account cursor")
+            try check(store.data.tapPracticeAttempts?[guestChallenge.key] == nil, "Guest-only answer leaked into account")
+            let durable = try persistence.load(scope: userID.uuidString).data
+            try check(durable.tapPracticeAttempts == account.tapPracticeAttempts && durable.practiceCursors == account.practiceCursors,
+                      "Durable account state differs from isolated private tap state")
+            try check(try persistence.load(scope: "guest").data == guestRecord, "Sign-in altered the separate guest record")
+        }
+        await run("consented guest import preserves private tap work while existing account conflicts win") {
+            let (store, persistence, _) = try fixture(catalogue, api, authenticated: false)
+            var account = store.normalizedDailyPlan(try persistence.load(scope: userID.uuidString).data, at: store.currentDate)
+            let roleId = account.profile!.roleId
+            try check(store.finishOnboarding(profile: account.profile!), "Consented guest profile fixture failed")
+            let conflict = store.practiceChallenge(for: store.data.currentWordIds[0])!
+            let unique = store.practiceChallenge(for: store.data.currentWordIds[1])!
+            let guestWrong = conflict.options.first { $0.id != conflict.correctId }!.id
+            let accountWrong = conflict.options.first { $0.id != conflict.correctId && $0.id != guestWrong }!.id
+            try check(store.answerPractice(conflict, choiceId: guestWrong), "Guest conflicting answer setup failed")
+            try check(store.answerPractice(unique, choiceId: unique.options.first { $0.id != unique.correctId }!.id),
+                      "Guest unique answer setup failed")
+            try check(store.focusPracticeWord(unique.wordId), "Guest conflicting cursor setup failed")
+            let protectedAttempt = TapPracticeAttempt(signature: conflict.signature, choices: [accountWrong], revealed: true)
+            let protectedCursor = PracticeCursor(dayKey: account.lessonDayKey!, wordId: account.currentWordIds[2])
+            account.tapPracticeAttempts = [conflict.key: protectedAttempt]
+            account.practiceCursors = [roleId: protectedCursor]
+            try persistence.save(account, scope: userID.uuidString)
+            let otherRole = catalogue.roles.first { $0.id != roleId }!
+            let otherProfile = LearnerProfile(roleId: otherRole.id, seniorityId: catalogue.seniorityLevels[0].id,
+                situationIds: [otherRole.situations[0].id], goalIds: otherRole.defaultGoalIds)
+            try check(store.finishOnboarding(profile: otherProfile), "Guest-only role fixture failed")
+            let other = store.practiceChallenge(for: store.data.currentWordIds[1])!
+            try check(store.answerPractice(other, choiceId: other.options.first { $0.id != other.correctId }!.id)
+                && store.focusPracticeWord(other.wordId), "Guest-only role private state fixture failed")
+            let guestRecord = try persistence.load(scope: "guest").data
+            let verifiedSession = try json(session)
+            QAProtocol.configure { request in
+                switch request.url?.path {
+                case "/auth/v1/verify": return .init(body: verifiedSession)
+                case "/rest/v1/lucid_state": return .init(body: [])
+                default: return .init(failure: URLError(.notConnectedToInternet))
+                }
+            }
+            let verified = await store.verifyLogin(email: "learner@example.com", code: "123456", includeGuest: true)
+            await quiesce(store)
+            try check(verified, "Consented guest sign-in failed")
+            try check(store.data.tapPracticeAttempts?[conflict.key] == protectedAttempt
+                && store.data.practiceCursors?[roleId] == protectedCursor,
+                "Guest conflict replaced existing account answers/cursor")
+            try check(store.data.tapPracticeAttempts?[unique.key] == guestRecord.tapPracticeAttempts?[unique.key]
+                && store.data.tapPracticeAttempts?[other.key] == guestRecord.tapPracticeAttempts?[other.key],
+                "Consented import discarded guest-only answers")
+            try check(store.data.practiceCursors?[otherRole.id] == guestRecord.practiceCursors?[otherRole.id]
+                && store.practiceResumeWordId == other.wordId, "Consented import lost guest-only role resume cursor")
+            try check(store.totalXP == 0 && store.data.progressByWordId.isEmpty,
+                      "Importing wrong answers/revealed feedback invented guided credit or mastery")
+            let durable = try persistence.load(scope: userID.uuidString).data
+            try check(durable.tapPracticeAttempts == store.data.tapPracticeAttempts
+                && durable.practiceCursors == store.data.practiceCursors, "Consented private state was not durable")
+            try check(try persistence.load(scope: "guest").data == guestRecord, "Guest import altered the source guest record")
+        }
+        await run("an in-flight cloud upload cannot overwrite newer tap answers or the resume cursor") {
+            let (store, persistence, _) = try fixture(catalogue, api)
+            store.prepareToday()
+            let challenge = store.practiceChallenge(for: store.data.currentWordIds[0])!
+            let wrong = challenge.options.first { $0.id != challenge.correctId }!.id
+            let resumeId = store.data.currentWordIds[2]
+            try check(store.answerPractice(challenge, choiceId: wrong) && store.focusPracticeWord(challenge.wordId),
+                      "In-flight tap fixture failed")
+            store.syncTask?.cancel()
+            var uploads = 0
+            var mutationFailure: Error?
+            QAProtocol.configure { request in
+                switch request.url?.path {
+                case "/auth/v1/user": return .init(body: user)
+                case "/rest/v1/lucid_state": return .init(body: [])
+                case "/rest/v1/rpc/lucid_save_state":
+                    uploads += 1
+                    if uploads == 1 {
+                        let edited = DispatchSemaphore(value: 0)
+                        Task { @MainActor in
+                            do {
+                                try check(store.answerPractice(challenge, choiceId: challenge.correctId),
+                                          "A live answer could not save while upload waited")
+                                try check(store.focusPracticeWord(resumeId), "A live cursor could not save while upload waited")
+                            } catch { mutationFailure = error }
+                            edited.signal()
+                        }
+                        try check(edited.wait(timeout: .now() + 5) == .success, "Concurrent tap edit did not run")
+                    }
+                    return .init(body: 1)
+                default: return .init(failure: URLError(.notConnectedToInternet))
+                }
+            }
+            await store.syncNow()
+            await quiesce(store)
+            if let mutationFailure { throw mutationFailure }
+            try check(uploads >= 1, "Fixture never reached the held upload")
+            try check(store.tapAttempt(for: challenge)?.choices == [wrong, challenge.correctId],
+                      "Late upload response replaced the newer tap answer")
+            try check(store.practiceResumeWordId == resumeId && store.data.practiceCursors?[challenge.roleId]?.wordId == resumeId,
+                      "Late upload response reset the newer resume cursor")
+            try check(store.totalXP == 10 && store.activities.filter { $0.kind == .practice && $0.wordId == challenge.wordId }.count == 1,
+                      "In-flight merge lost or duplicated the tap award")
+            try check(!store.hasUnsavedChanges, "Successful final sync did not durably save the live tap state")
+            let durable = try persistence.load(scope: userID.uuidString).data
+            try check(durable.tapPracticeAttempts == store.data.tapPracticeAttempts
+                && durable.practiceCursors == store.data.practiceCursors, "Newer answers/cursor were not persisted after upload")
         }
         await run("successful sync clears recovered disk and cloud errors") {
             let (store, persistence, _) = try fixture(catalogue, api)
@@ -443,6 +584,9 @@ struct AuthQATests {
         }
         await run("sign-out does not carry an account's unsaved flag into guest mode") {
             let (store, persistence, vault) = try fixture(catalogue, api)
+            let path = catalogue.learningPaths![0]
+            store.data.courseCheckDrafts = [path.roleId: CourseCheckDraft(pathId: path.id, answers: [1], questionSignature: CourseCheckDraft.signature(for: path.startingCheck!))]
+            store.data.pathPlacements = [path.roleId: PathPlacement(pathId: path.id, startingModuleId: path.modules[4].id, checkedAt: Date(), correctAnswers: 6, questionCount: 6)]
             store.hasUnsavedChanges = true
             store.storageNotice = "Earlier account save failed"
             QAProtocol.configure { request in
@@ -453,6 +597,7 @@ struct AuthQATests {
             try check(store.session == nil && vault.session == nil && store.scope == "guest", "Sign-out did not switch to guest")
             try check(!store.hasUnsavedChanges && store.storageNotice == nil, "A saved account's unsaved flag leaked into guest mode")
             try check(store.data == persistence.load(scope: "guest").data, "Sign-out changed the separate guest record")
+            try check(store.data.courseCheckDrafts == nil && store.data.pathPlacements == nil, "Account check data crossed into guest mode")
             await quiesce(store)
         }
         await run("sign-out durably preserves a memory-only edit made while logout waits") {

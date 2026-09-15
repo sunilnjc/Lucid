@@ -5,13 +5,14 @@ import { spawnSync } from "node:child_process";
 
 const directory = await mkdtemp(join(tmpdir(), "lucid-native-tests-"));
 try {
-  for (const suite of ["learning", "path", "auth-protocol", "auth-recovery", "learning-qa", "auth-qa", "role-switch", "role-switch-edge", "review-navigation", "library"]) {
+  for (const suite of ["learning", "path", "course", "tap-practice", "auth-protocol", "auth-recovery", "learning-qa", "auth-qa", "role-switch", "role-switch-edge", "review-navigation", "library"]) {
   const executable = join(directory, `${suite}-tests`);
   const build = spawnSync("xcrun", [
     "swiftc", "-parse-as-library",
     "ios/Lucid/Lucid/Models.swift", "ios/Lucid/Lucid/LearningPersistence.swift",
     "ios/Lucid/Lucid/LearningStore.swift", "ios/Lucid/Lucid/AccountService.swift",
     "ios/Lucid/Lucid/LocalBackup.swift",
+    "ios/Lucid/Lucid/PracticeChallenges.swift",
     `tests/native-${suite}-tests.swift`, "-o", executable,
   ], { stdio: "inherit" });
   if (build.status !== 0) { process.exitCode = build.status ?? 1; break; }

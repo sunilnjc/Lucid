@@ -19,51 +19,35 @@ struct PracticeDashboard: View {
     @EnvironmentObject private var store: LearningStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text(store.selectedRole?.shortLabel.uppercased() ?? "YOUR DAILY PRACTICE")
                     .font(.caption.weight(.bold)).tracking(1.1).foregroundStyle(LucidColour.mint)
                 Spacer()
-                Text(store.currentDate.formatted(.dateTime.month(.abbreviated).day()))
-                    .font(.subheadline).foregroundStyle(LucidColour.secondaryOnDark)
-            }
-            Text(store.isCurrentPlanComplete ? "A little better, every day." : (store.todayWords.isEmpty ? "Keep your words alive." : "Make these words yours."))
-                .font(.system(.largeTitle, design: .serif)).fixedSize(horizontal: false, vertical: true)
-            Text(store.isCurrentPlanComplete ? "This role’s practice is complete. Take what you practised into your next conversation." : (store.todayWords.isEmpty ? "You’ve explored the current collection for your role. Review what you know and put it to work." : (store.isTodayComplete ? "Your daily bonus is already earned. Explore this role’s words at your own pace; each new word still earns practice XP." : "\(store.todayWords.count) useful \(store.todayWords.count == 1 ? "word" : "words"). One real sentence for each. A few minutes for you.")))
-                .font(.body).foregroundStyle(LucidColour.secondaryOnDark).lineSpacing(3)
+                Label("\(store.streak)", systemImage: "flame.fill").foregroundStyle(LucidColour.coral)
+                    .accessibilityLabel("\(store.streak) day streak")
+                Text("\(store.totalXP) XP").foregroundStyle(LucidColour.mint)
+            }.font(.subheadline.weight(.semibold))
+            Text(store.isCurrentPlanComplete ? "A little better, every day." : (store.todayWords.isEmpty ? "Keep your words alive." : "A few words. A little progress."))
+                .font(.system(.title2, design: .serif)).fixedSize(horizontal: false, vertical: true)
+            Text(store.todayWords.isEmpty ? "Explore your Library or return when a review is due." : "Quick tap challenges. No typing or microphone needed.")
+                .font(.subheadline).foregroundStyle(LucidColour.secondaryOnDark)
             if !store.todayWords.isEmpty {
-                HStack(spacing: 18) {
-                    ZStack {
-                        Circle().stroke(.white.opacity(0.12), lineWidth: 7)
-                        Circle().trim(from: 0, to: store.lessonProgress)
-                            .stroke(LucidColour.mint, style: StrokeStyle(lineWidth: 7, lineCap: .round))
-                            .rotationEffect(.degrees(-90))
-                            .animation(reduceMotion ? nil : .easeInOut(duration: 0.4), value: store.lessonProgress)
-                        Text("\(store.data.completedWordIdsToday.filter(store.data.currentWordIds.contains).count)/\(store.todayWords.count)")
-                            .font(.headline.monospacedDigit())
-                    }
-                    .frame(width: 66, height: 66)
-                    .accessibilityElement(children: .ignore)
+                ProgressView(value: store.lessonProgress).tint(LucidColour.mint)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 0.3), value: store.lessonProgress)
                     .accessibilityLabel("Daily practice")
                     .accessibilityValue("\(Int(store.lessonProgress * 100)) percent complete")
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(store.isCurrentPlanComplete ? "Current practice complete" : (store.isTodayComplete ? "Current role practice" : "Your daily goal")).font(.headline)
-                        Text(store.isTodayComplete ? "10 XP per new word · Daily bonus already earned" : "10 XP per word · 20 XP for finishing")
-                            .font(.subheadline).foregroundStyle(LucidColour.secondaryOnDark)
-                    }
-                }
+                HStack(alignment: .top) {
+                    Text("\(store.data.completedWordIdsToday.filter(store.data.currentWordIds.contains).count) of \(store.todayWords.count) practised")
+                    Spacer()
+                    Text(store.isTodayComplete ? "10 XP per new word · Daily bonus already earned" : "10 XP per word · 20 XP for finishing")
+                        .multilineTextAlignment(.trailing)
+                }.font(.footnote).foregroundStyle(LucidColour.secondaryOnDark)
             }
-            HStack {
-                Label("\(store.streak) \(store.streak == 1 ? "day" : "days")", systemImage: "flame.fill").foregroundStyle(LucidColour.coral)
-                Spacer()
-                Label("\(store.totalXP) XP", systemImage: "sparkle").foregroundStyle(LucidColour.mint)
-            }
-            .font(.subheadline.weight(.semibold))
-        }
-        .padding(22)
-        .background(LucidColour.surface, in: RoundedRectangle(cornerRadius: 26))
-        .overlay(RoundedRectangle(cornerRadius: 26).stroke(.white.opacity(0.1)))
-        .foregroundStyle(LucidColour.textOnDark)
+        }.padding(18)
+            .background(LucidColour.surface, in: RoundedRectangle(cornerRadius: 22))
+            .overlay(RoundedRectangle(cornerRadius: 22).stroke(.white.opacity(0.1)))
+            .foregroundStyle(LucidColour.textOnDark)
     }
 }
 

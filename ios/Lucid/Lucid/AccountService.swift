@@ -294,6 +294,12 @@ extension LearningStore {
                     // Importing cannot turn a revealed hint into independent recall.
                     !guest.independent ? guest : account
                 }
+                next.tapPracticeAttempts = (data.tapPracticeAttempts ?? [:]).merging(next.tapPracticeAttempts ?? [:]) { guest, account in
+                    account.choices.isEmpty && !account.revealed ? guest : account
+                }
+                next.practiceCursors = (data.practiceCursors ?? [:]).merging(next.practiceCursors ?? [:]) { guest, account in
+                    guest.dayKey > account.dayKey ? guest : account
+                }
             }
             next = normalizedDailyPlan(next, at: clock())
             try persistence.save(next, scope: newScope)

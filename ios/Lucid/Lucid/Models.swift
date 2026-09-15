@@ -15,8 +15,46 @@ struct ProfessionalLearningPath: Codable, Identifiable {
     let title: String
     let description: String
     let modules: [ProfessionalPathModule]
+    var startingCheck: [CourseCheckQuestion]? = nil
     var lessons: [ProfessionalPathLesson] { modules.flatMap(\.lessons) }
     var wordIds: [String] { lessons.flatMap(\.wordIds) }
+}
+
+struct CourseCheckQuestion: Codable, Identifiable {
+    let id: String
+    let prompt: String
+    let options: [String]
+    let correctIndex: Int
+    let explanation: String
+}
+
+/// A tentative course preference, not a proficiency certificate or mastery event.
+struct PathPlacement: Codable, Equatable {
+    let pathId: String
+    let startingModuleId: String
+    let checkedAt: Date
+    let correctAnswers: Int
+    let questionCount: Int
+}
+
+struct CourseCheckDraft: Codable, Equatable {
+    let pathId: String
+    var answers: [Int]
+    var questionSignature: String? = nil
+
+    static func signature(for questions: [CourseCheckQuestion]) -> String {
+        // Stable cache identity only, not a security digest.
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+        let bytes = (try? encoder.encode(questions)) ?? Data()
+        let hash = bytes.reduce(UInt64(14_695_981_039_346_656_037)) { ($0 ^ UInt64($1)) &* 1_099_511_628_211 }
+        return String(hash, radix: 16)
+    }
+
+    func matches(_ path: ProfessionalLearningPath) -> Bool {
+        guard pathId == path.id, let questions = path.startingCheck, questions.count == 6,
+              questionSignature == Self.signature(for: questions), answers.count <= questions.count else { return false }
+        return answers.enumerated().allSatisfy { index, answer in answer == -1 || questions[index].options.indices.contains(answer) }
+    }
 }
 
 struct ProfessionalPathModule: Codable, Identifiable {
@@ -68,6 +106,9 @@ struct CommunicationGoal: Codable, Identifiable, Hashable {
 }
 
 struct ProfessionalWordContext: Codable, Hashable {
+    var partOfSpeech: String? = nil
+    var pronunciation: String? = nil
+    var difficulty: String? = nil
     let meaning: String
     let collocations: [String]
     let example: String
@@ -79,10 +120,10 @@ struct ProfessionalWordContext: Codable, Hashable {
 struct ProfessionalWord: Codable, Identifiable, Hashable {
     let id: String
     let term: String
-    let partOfSpeech: String
-    let pronunciation: String
+    var partOfSpeech: String
+    var pronunciation: String
     var meaning: String
-    let difficulty: String
+    var difficulty: String
     let usefulness: String
     let learningMode: String
     let roles: [String]
@@ -99,6 +140,9 @@ struct ProfessionalWord: Codable, Identifiable, Hashable {
     func contextualized(for roleId: String?) -> ProfessionalWord {
         guard let roleId, roles.contains(roleId), let context = roleContexts?[roleId] else { return self }
         var result = self
+        result.partOfSpeech = context.partOfSpeech ?? partOfSpeech
+        result.pronunciation = context.pronunciation ?? pronunciation
+        result.difficulty = context.difficulty ?? difficulty
         result.meaning = context.meaning
         result.collocations = context.collocations
         result.example = context.example
@@ -158,6 +202,12 @@ struct LearnerData: Codable, Equatable {
     // Device-local snapshots keep each visited role stable for the calendar day.
     var lessonRoleId: String?
     var dailyRolePlans: [String: DailyRolePlan]?
+    var pathPlacements: [String: PathPlacement]?
+    // Unfinished checks stay on this device; only the chosen starting point syncs.
+    var courseCheckDrafts: [String: CourseCheckDraft]?
+    // Tap answers and the current card are private, device-local resumable state.
+    var tapPracticeAttempts: [String: TapPracticeAttempt]?
+    var practiceCursors: [String: PracticeCursor]?
     var practiceDrafts: [String: String]?
     var reviewAttempts: [String: ReviewAttempt]?
     var activities: [LearningActivity]?
@@ -178,6 +228,17 @@ struct LearnerData: Codable, Equatable {
 struct ReviewAttempt: Codable, Equatable {
     let originalAttempt: String
     let independent: Bool
+}
+
+struct TapPracticeAttempt: Codable, Equatable {
+    let signature: String
+    var choices: [String] = []
+    var revealed = false
+}
+
+struct PracticeCursor: Codable, Equatable {
+    let dayKey: String
+    let wordId: String
 }
 
 struct LearningActivity: Codable, Identifiable, Equatable {

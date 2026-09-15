@@ -161,10 +161,13 @@ struct AuthProtocolTests {
         var learner = LearnerData()
         learner.practiceDrafts = ["word": "private sentence"]
         learner.reviewAttempts = ["day:word": ReviewAttempt(originalAttempt: "private answer", independent: false)]
+        learner.courseCheckDrafts = ["finance-accounting": CourseCheckDraft(pathId: "course-fixture", answers: [1])]
+        learner.pathPlacements = ["finance-accounting": PathPlacement(pathId: "course-fixture", startingModuleId: "module-fixture", checkedAt: Date(), correctAnswers: 4, questionCount: 6)]
         try stub("/rest/v1/rpc/lucid_save_state", json: 1) { request in
             let payload = try body(request)
             let record = payload["new_state"] as! [String: Any]
             try check(record["practiceDrafts"] == nil && record["reviewAttempts"] == nil, "Private practice leaked to cloud")
+            try check(record["courseCheckDrafts"] == nil && record["pathPlacements"] != nil, "Starting-point privacy contract changed")
             try check(record["schemaVersion"] as? Int == 2, "Cloud schema version missing")
         }
         try await api.save(learner, revision: 0, session: session)

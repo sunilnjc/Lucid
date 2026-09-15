@@ -156,6 +156,7 @@ struct SettingsView: View {
                 Section {
                     LabeledContent("Catalogue", value: "\(store.catalog.words.count) professional words")
                     LabeledContent("Version", value: Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0")
+                    LabeledContent("Build", value: Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "—")
                 }
                 .listRowBackground(LucidColour.surface)
             }

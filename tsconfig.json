@@ -23,6 +23,7 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
+    ".wrangler/runtime.d.ts",
     "**/*.mts"
   ],
   "exclude": ["node_modules", "supabase/functions"]

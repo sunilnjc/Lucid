@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+        110000000000000000000012 /* PracticeChallenges.swift in Sources */ = {isa = PBXBuildFile; fileRef = 120000000000000000000012 /* PracticeChallenges.swift */; };
         110000000000000000000011 /* LearningPathViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 120000000000000000000011 /* LearningPathViews.swift */; };
 		11000000000000000000000C /* LearningPersistence.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12000000000000000000000C /* LearningPersistence.swift */; };
 		11000000000000000000000D /* AccountService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 12000000000000000000000D /* AccountService.swift */; };
@@ -26,6 +27,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+        120000000000000000000012 /* PracticeChallenges.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PracticeChallenges.swift; sourceTree = "<group>"; };
         120000000000000000000011 /* LearningPathViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningPathViews.swift; sourceTree = "<group>"; };
 		12000000000000000000000C /* LearningPersistence.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LearningPersistence.swift; sourceTree = "<group>"; };
 		12000000000000000000000D /* AccountService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountService.swift; sourceTree = "<group>"; };
@@ -81,6 +83,7 @@
 				12000000000000000000000F /* ExperienceViews.swift */,
 				120000000000000000000010 /* LocalBackup.swift */,
                 120000000000000000000011 /* LearningPathViews.swift */,
+                120000000000000000000012 /* PracticeChallenges.swift */,
 				120000000000000000000020 /* Config.xcconfig */,
 				120000000000000000000008 /* Assets.xcassets */,
 				12000000000000000000000A /* PrivacyInfo.xcprivacy */,
@@ -176,6 +179,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+                110000000000000000000012 /* PracticeChallenges.swift in Sources */,
 				110000000000000000000001 /* LucidApp.swift in Sources */,
 				110000000000000000000002 /* Models.swift in Sources */,
 				110000000000000000000003 /* LearningStore.swift in Sources */,
@@ -315,7 +319,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = GQAVQ4V6RR;
 				ENABLE_PREVIEWS = YES;
@@ -359,7 +363,7 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
 				DEVELOPMENT_ASSET_PATHS = "";
 				DEVELOPMENT_TEAM = GQAVQ4V6RR;
 				ENABLE_PREVIEWS = YES;

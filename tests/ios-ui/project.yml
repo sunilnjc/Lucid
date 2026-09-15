@@ -1,0 +1,50 @@
+name: LucidJourneyQA
+options:
+  deploymentTarget:
+    iOS: '17.0'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    CODE_SIGN_IDENTITY: '-'
+    LUCID_CLOUD_AUTH_ENABLED: 'NO'
+    LUCID_EMAIL_DELIVERY_READY: 'NO'
+    LUCID_SUPABASE_URL: ''
+    LUCID_SUPABASE_PUBLISHABLE_KEY: ''
+targets:
+  LucidUIQA:
+    type: application
+    platform: iOS
+    sources:
+      - path: ../../ios/Lucid/Lucid
+        excludes: [Info.plist]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.sunilnjc.lucid.uiqa
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UIUserInterfaceStyle: Dark
+        INFOPLIST_KEY_LucidCloudAuthEnabled: 'NO'
+        INFOPLIST_KEY_LucidEmailDeliveryReady: 'NO'
+        INFOPLIST_KEY_CFBundleDisplayName: Lucid QA
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        TARGETED_DEVICE_FAMILY: '1,2'
+  LucidJourneyTests:
+    type: bundle.ui-testing
+    platform: iOS
+    sources: [Tests]
+    dependencies:
+      - target: LucidUIQA
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.sunilnjc.lucid.uiqa.tests
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_TARGET_NAME: LucidUIQA
+schemes:
+  LucidJourneyQA:
+    build:
+      targets:
+        LucidUIQA: all
+        LucidJourneyTests: [test]
+    test:
+      targets: [LucidJourneyTests]
