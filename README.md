@@ -1,5 +1,12 @@
 # Lucid Vocabulary Coach
 
+## Live app and engineering overview
+
+**Live app:** https://lucid-vocabulary-sunil.sunilkumar-kalabandi.chatgpt.site · **Stage:** deployed learning application.
+
+Lucid turns vocabulary practice into short lessons, usage exercises, spaced review and periodic quizzes. The React/TypeScript application persists progress in Cloudflare D1 and caches recently used content and unsynchronised progress on-device for offline continuity. Visitor identity determines progress isolation; see the implementation notes below.
+
+
 Lucid is a mobile-first advanced English learning app. It delivers ten words per lesson across emotional expression, intellectual conversation, and leadership, with usage exercises, spaced review, and every-fifth-day quizzes.
 
 ## Local development
