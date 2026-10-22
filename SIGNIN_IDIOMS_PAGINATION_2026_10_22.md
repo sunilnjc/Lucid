@@ -1,6 +1,6 @@
 # Sign-in, idiom discovery and pagination — 22 October 2026
 
-Status: **source frozen and locally verified; current public Site remains version 7**. GitHub push is reported separately from website delivery; no final Git commit or new deployment receipt is claimed in this record yet. The user authorized code changes, the GitHub push and release to [learnwithlucid.com](https://learnwithlucid.com), including Library/idiom search and A–Z pagination with at most 20 entries per page. No new provider, credential creation, public signup, destructive account feature or owner-phone change is included.
+Status: **source frozen and locally verified; current public Site remains version 7**. Implementation commit `6cae19c9bbca457602fceaeec1bde3fefc83f576` was pushed to GitHub `main` and verified remotely. This follow-up record distinguishes that source delivery from website delivery; no new deployment receipt is claimed. The user authorized code changes, the GitHub push and release to [learnwithlucid.com](https://learnwithlucid.com), including Library/idiom search and A–Z pagination with at most 20 entries per page. No new provider, credential creation, public signup, destructive account feature or owner-phone change is included.
 
 ## Scope and source review
 
@@ -31,7 +31,7 @@ The isolated release checkout is `.build/github-release-20261022`. Final web/nat
 | Earlier scoped sync and catalog checks | 30 sync/persistence, 33 Library/idiom UI/pagination and 2 catalog engine checks passed; do not add overlapping focused counts to the full-suite total |
 | Actual local Wrangler HTTP worker | **57/57 passed**: exact Korean query, idiom deep link, EN/KO/legal routes, two intentional `/start` 307 redirects, disabled account status, four expected gated account POST 503 responses, and all 29 public precache files |
 | Native behavior regression | **264/264 groups across 16 suites passed**, exit 0, zero failures; includes 21 shared-sync, 23 account QA, 22 daily and 7 localization groups |
-| GitHub delivery | Source prepared from the preserved remote baseline; push receipt reported separately, with no final SHA claimed here |
+| GitHub delivery | Implementation `6cae19c9bbca457602fceaeec1bde3fefc83f576` pushed by normal fast-forward from `9146fdd4c01994aeae2e1a7a84e65417248a61dd`; remote `main` SHA verified |
 | Website delivery | Current live Site is version 7; no October 22 release receipt yet |
 | Actual browser/mobile viewport/provider journey | Unrun; HTTP/component checks do not establish these acceptance cases |
 
@@ -70,4 +70,4 @@ Automatic approval review rejected a new web account-deletion API as an unreques
 
 Older QA/publication/rollout records, `CLAUDE.md`, `LOCAL_DEVELOPMENT.md`, `ios/AppStore/AUTH_SETUP.md`, private configuration and incidental `infra` are preserved. No raw private learner content, credentials or runtime databases belong in this repository record or release package. The native regression log is `.build/qa/2026-10-22-signin-idioms/native-regression.log`, SHA-256 `eaa926d08a04adcd53571019af7ea4480e78fac420134e4bfbed5285490874ad`; it used the regenerated localization resource SHA-256 `d06908b2d70ac4bbd63b9b0ebb6d4cd61c755eeb1047797d57e9f8a718ce4584`.
 
-A final read-only canonical-domain check on 22 October returned HTTP 200 for `/?lang=ko` and the idiom query. HTTP and www redirect to HTTPS apex with query preserved (308). Live account status remains disabled and live service-worker SHA-256 remains `79b49c18302ee7d851c991d67df05c1c74f806f813c379d1af5dcf4f9c124d4e`, confirming the old release is still served. No new deployment is claimed. Final GitHub push receipts are in the task output; source provenance is the commit containing this record.
+A final read-only canonical-domain check on 22 October returned HTTP 200 for `/?lang=ko` and the idiom query. HTTP and www redirect to HTTPS apex with query preserved (308). Live account status remains disabled and live service-worker SHA-256 remains `79b49c18302ee7d851c991d67df05c1c74f806f813c379d1af5dcf4f9c124d4e`, confirming the old release is still served. No new deployment is claimed. GitHub implementation receipt: `6cae19c9bbca457602fceaeec1bde3fefc83f576`, normal push to `git@github.com:sunilnjc/Lucid.git` `main`, verified by `git ls-remote`. A documentation-only follow-up records the completed native run and this receipt. The final remote HEAD is reported in the task output.
