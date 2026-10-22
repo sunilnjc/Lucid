@@ -10,7 +10,7 @@ English/Korean introductions and partial Korean learning support are published. 
 
 Version 8 exposes the 14 authored idioms through a dedicated destination and Today shortcut. Library/idiom lists apply search/filter → English A–Z sort → pages of at most 20, with Previous/Next and count controls. Daily curated assignments are preserved. All 29 hosted public assets match the tested build, 47 logical HTTP checks passed, and isolated Chrome desktop/mobile catalog checks passed **12/12**. See [PUBLICATION_2026_10_22.md](PUBLICATION_2026_10_22.md).
 
-**The guest-first follow-up is locally verified and prepared for release; the public site is still version 8.** Public sign-in/email remain disabled. Guest and earlier Sites/D1 records remain separate from Supabase UUID accounts. GitHub follow-up: the source is tested locally; the verified implementation receipt is added below after push.
+**The guest-first follow-up is locally verified and prepared for release; the public site is still version 8.** Public sign-in/email remain disabled. Guest and earlier Sites/D1 records remain separate from Supabase UUID accounts. GitHub implementation [`4c2264dc2a34591decbace37b240be8b9bfc96fe`](https://github.com/sunilnjc/Lucid/commit/4c2264dc2a34591decbace37b240be8b9bfc96fe) was pushed to the existing `main` branch and its remote SHA verified on 22 October 2026. This records source delivery; website publication remains pending.
 
 ## Guest-first follow-up
 

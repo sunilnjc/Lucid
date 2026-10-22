@@ -1,6 +1,6 @@
 # Sign-in, guest exploration, idioms and pagination — 22 October 2026
 
-**Version 8 is live on [learnwithlucid.com](https://learnwithlucid.com), including [Korean idioms](https://learnwithlucid.com/?lang=ko&view=idioms).** The guest-first and signup follow-up is locally verified and prepared for release, with public deployment still pending. Public shared sign-in remains disabled. GitHub follow-up: the source is tested locally; the verified implementation receipt is added below after push.
+**Version 8 is live on [learnwithlucid.com](https://learnwithlucid.com), including [Korean idioms](https://learnwithlucid.com/?lang=ko&view=idioms).** The guest-first and signup follow-up is locally verified and prepared for release, with public deployment still pending. Public shared sign-in remains disabled. GitHub implementation [`4c2264dc2a34591decbace37b240be8b9bfc96fe`](https://github.com/sunilnjc/Lucid/commit/4c2264dc2a34591decbace37b240be8b9bfc96fe) was pushed to the existing `main` branch and its remote SHA verified on 22 October 2026. This records source delivery; website publication remains pending.
 
 This record separates live delivery, prepared source, local verification and real-provider acceptance. Exact version-8 provenance is retained in [PUBLICATION_2026_10_22.md](PUBLICATION_2026_10_22.md); the new backend setup is recorded in [SUPABASE_SETUP_2026_10_22.md](SUPABASE_SETUP_2026_10_22.md).
 
