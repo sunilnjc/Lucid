@@ -153,6 +153,32 @@ BEGIN
 END
 $payload_shapes$;
 
+
+-- Current course placement and text-free context evidence compatibility.
+-- This owner-only fixture checks the exact new optional shapes without rewriting rows.
+DO $course_evidence_shapes$
+DECLARE
+  placement jsonb := '{"finance-accounting":{"pathId":"finance-path","startingModuleId":"finance-module-1","checkedAt":811209600,"correctAnswers":4,"questionCount":6}}';
+  evidence jsonb := '[{"id":"77777777-7777-4777-8777-777777777777","wordId":"finance-reconcile","roleId":"finance-accounting","senseId":"finance-reconcile::finance-accounting","date":"2026-09-15","recordedAt":811209600,"kind":"unaided-recall","quality":2,"independent":true}]';
+BEGIN
+  IF NOT public.lucid_v2_value_valid('{"finance-reconcile::finance-accounting":811209600}'::jsonb, 'context-date-map')
+     OR public.lucid_v2_value_valid('{"finance-reconcile::finance-accounting":"private text"}'::jsonb, 'context-date-map')
+     OR NOT public.lucid_v2_value_valid(placement, 'placement-map')
+     OR NOT public.lucid_v2_value_valid(evidence, 'context-evidence-list') THEN
+    RAISE EXCEPTION 'FAIL: current optional course/evidence fields rejected';
+  END IF;
+  IF public.lucid_v2_value_valid(jsonb_set(placement, '{finance-accounting,correctAnswers}', '7'), 'placement-map')
+     OR public.lucid_v2_value_valid(jsonb_set(placement, '{finance-accounting,privateDraft}', '"private"'), 'placement-map')
+     OR public.lucid_v2_value_valid(jsonb_set(evidence, '{0,response}', '"private learner text"'), 'context-evidence-list')
+     OR public.lucid_v2_value_valid(jsonb_set(evidence, '{0,senseId}', '"another-context"'), 'context-evidence-list')
+     OR public.lucid_v2_value_valid(jsonb_set(evidence, '{0,date}', '"2026-02-31"'), 'context-evidence-list')
+     OR public.lucid_v2_value_valid(jsonb_set(jsonb_set(evidence, '{0,kind}', '"recognition"'), '{0,independent}', 'true'), 'context-evidence-list') THEN
+    RAISE EXCEPTION 'FAIL: malformed course/evidence metadata accepted';
+  END IF;
+  RAISE NOTICE 'PASS: placement and contextual evidence shapes; private text and invalid evidence rejected';
+END
+$course_evidence_shapes$;
+
 -- Anonymous clients must not be able to read either table or execute the RPC.
 SET LOCAL ROLE anon;
 SET LOCAL "request.jwt.claims" = '{}';

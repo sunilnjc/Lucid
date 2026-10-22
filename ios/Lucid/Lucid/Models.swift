@@ -190,6 +190,7 @@ struct AppSettings: Codable, Equatable {
 struct DailyRolePlan: Codable, Equatable {
     var dayKey: String
     var wordIds: [String]
+    var completedWordIds: [String]? = nil
 }
 
 struct LearnerData: Codable, Equatable {
@@ -203,13 +204,29 @@ struct LearnerData: Codable, Equatable {
     var lessonRoleId: String?
     var dailyRolePlans: [String: DailyRolePlan]?
     var pathPlacements: [String: PathPlacement]?
-    // Unfinished checks stay on this device; only the chosen starting point syncs.
+    // Native check signatures stay local; authored question IDs and answers can mirror into shared checkpoints.
     var courseCheckDrafts: [String: CourseCheckDraft]?
-    // Tap answers and the current card are private, device-local resumable state.
+    // Native challenge caches stay local; safe choices and the card checkpoint mirror into sharedLearning.
     var tapPracticeAttempts: [String: TapPracticeAttempt]?
     var practiceCursors: [String: PracticeCursor]?
     var practiceDrafts: [String: String]?
     var reviewAttempts: [String: ReviewAttempt]?
+    // Private text and responses remain local. Safe exposure and studio metadata mirror into sharedLearning.
+    var contextExposures: [String: String]?
+    var expressionGaps: [ExpressionGap]?
+    var rehearsalSessions: [String: RehearsalSession]?
+    var transferSessions: [String: TransferSession]?
+    var studioDrafts: [String: String]?
+    var portableWebCompanion: StudioJSONValue?
+    // Optional device-private daily discovery; never sent to the v2 account backend.
+    var dailyVocabulary: DailyVocabularyLocal?
+    // The shared account contract contains authored phrasing and text-free checkpoints only.
+    var sharedLearning: SharedLearningState?
+    // Archived global milestones stay local/backups; they never establish current role retention.
+    var historicalMasteredWordIds: [String]?
+    // Anonymous learning evidence can merge by immutable UUID without private responses.
+    var contextEvidence: [ContextEvidence]?
+    var contextIntroducedOn: [String: Date]?
     var activities: [LearningActivity]?
     var favouriteChanges: [String: FavouriteChange]?
     var updatedAt: Date?
@@ -228,6 +245,10 @@ struct LearnerData: Codable, Equatable {
 struct ReviewAttempt: Codable, Equatable {
     let originalAttempt: String
     let independent: Bool
+    // Missing metadata in an older saved attempt never establishes a new role context.
+    var roleId: String? = nil
+    var senseId: String? = nil
+    var capturedAt: Date? = nil
 }
 
 struct TapPracticeAttempt: Codable, Equatable {
@@ -306,3 +327,96 @@ extension Date {
         Calendar.current.isDate(self, inSameDayAs: other)
     }
 }
+
+
+/// Optional, additive account contract. Its timestamps are ISO 8601 UTC strings;
+/// native v2 dates elsewhere remain Foundation reference-date seconds.
+struct SharedLearningState: Codable, Equatable {
+    var version = 1
+    var lessonCheckpoints: [String: SharedLessonCheckpoint] = [:]
+    var startingChecks: [String: SharedStartingCheck] = [:]
+    var notebook: [String: SharedNotebookEntry] = [:]
+    var rehearsals: [String: SharedRehearsal] = [:]
+    var challenges: [String: SharedChallenge] = [:]
+    var exposures: [String: SharedExposure] = [:]
+
+    static func stamp(_ date: Date) -> String {
+        let formatter = ISO8601DateFormatter(); formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: date)
+    }
+    static func instant(_ text: String) -> Date? {
+        let formatter = ISO8601DateFormatter(); formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let result = formatter.date(from: text) { return result }
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.date(from: text)
+    }
+    static func plausible(_ text: String, now: Date = Date()) -> Bool {
+        guard text.hasSuffix("Z"), let date = instant(text) else { return false }
+        return date.timeIntervalSince1970 >= 0 && date.timeIntervalSince1970.isFinite
+    }
+    func isValidForCloud(at now: Date = Date()) -> Bool {
+        guard isValid else { return false }
+        let timestamps = lessonCheckpoints.values.map(\.updatedAt) + startingChecks.values.map(\.updatedAt)
+            + notebook.values.flatMap { [$0.createdAt, $0.lastPractisedAt].compactMap { $0 } }
+            + rehearsals.values.flatMap { [$0.startedAt, $0.completedAt].compactMap { $0 } }
+            + challenges.values.flatMap { [$0.startedAt, $0.completedAt].compactMap { $0 } }
+            + exposures.values.map(\.firstSeenAt)
+        let days = lessonCheckpoints.values.map(\.dayKey) + exposures.values.map(\.dayKey)
+        let nowDay = ContextEvidence.utcAnchorDay(now)!
+        return timestamps.allSatisfy { Self.instant($0)! <= now.addingTimeInterval(300) }
+            && days.allSatisfy { ContextEvidence.calendarDay($0)! <= nowDay.addingTimeInterval(86_400) }
+            && notebook.values.allSatisfy { ContextEvidence.calendarDay($0.nextReviewOn)! <= nowDay.addingTimeInterval(45 * 86_400) }
+    }
+    var isValid: Bool {
+        version == 1 && lessonCheckpoints.allSatisfy { key, entry in
+            key == "\(entry.dayKey):\(entry.roleId)" && ContextEvidence.calendarDay(entry.dayKey) != nil
+            && entry.wordIds.count <= 3 && Set(entry.wordIds).count == entry.wordIds.count
+            && entry.completedWordIds.allSatisfy(entry.wordIds.contains)
+            && (entry.cursorWordId == nil || entry.wordIds.contains(entry.cursorWordId!))
+            && Self.plausible(entry.updatedAt)
+        } && startingChecks.allSatisfy { key, entry in
+            key == entry.roleId && entry.questionIds.count == 6 && Set(entry.questionIds).count == 6
+            && entry.answers.count <= 6 && entry.answers.allSatisfy { (-1...2).contains($0) }
+            && Self.plausible(entry.updatedAt)
+        } && notebook.allSatisfy { key, entry in
+            UUID(uuidString: key) != nil && key.lowercased() == entry.id.lowercased()
+            && ["plain", "precise", "diplomatic"].contains(entry.style) && entry.phrase.count <= 2_000
+            && ContextEvidence.calendarDay(entry.nextReviewOn) != nil && Self.plausible(entry.createdAt)
+            && (entry.lastPractisedAt == nil || Self.plausible(entry.lastPractisedAt!))
+        } && rehearsals.allSatisfy { key, entry in
+            UUID(uuidString: key) != nil && key.lowercased() == entry.id.lowercased()
+            && ["initial", "delayed"].contains(entry.mode) && Self.plausible(entry.startedAt)
+            && (entry.completedAt == nil || (Self.plausible(entry.completedAt!) && Self.instant(entry.completedAt!)! >= Self.instant(entry.startedAt)!))
+            && (entry.gapId == nil || UUID(uuidString: entry.gapId!) != nil)
+        } && challenges.allSatisfy { key, entry in
+            key == entry.id && key.count <= 200 && ["transfer", "comeback"].contains(entry.mode)
+            && entry.milestone >= 0 && entry.scenarioIds.count <= 3 && Set(entry.scenarioIds).count == entry.scenarioIds.count
+            && !entry.scenarioIds.isEmpty && entry.completedScenarioIds.allSatisfy(entry.scenarioIds.contains)
+            && Self.plausible(entry.startedAt)
+            && (entry.completedAt == nil || (Self.plausible(entry.completedAt!) && Set(entry.completedScenarioIds) == Set(entry.scenarioIds)))
+        } && exposures.allSatisfy { key, entry in
+            key.contains("::") && ContextEvidence.calendarDay(entry.dayKey) != nil && Self.plausible(entry.firstSeenAt)
+        }
+    }
+}
+struct SharedLessonAnswer: Codable, Equatable { let choiceId: String; let hinted: Bool }
+struct SharedLessonCheckpoint: Codable, Equatable {
+    let roleId: String; let dayKey: String; var wordIds: [String]; var completedWordIds: [String]
+    var cursorWordId: String? = nil; var answers: [String: SharedLessonAnswer]? = nil; var updatedAt: String
+}
+struct SharedStartingCheck: Codable, Equatable {
+    let roleId: String; let pathId: String; let questionIds: [String]; var answers: [Int]; var updatedAt: String
+}
+struct SharedNotebookEntry: Codable, Equatable {
+    let id: String; let roleId: String; let expressionId: String; let style: String; let phrase: String
+    let createdAt: String; var nextReviewOn: String; var lastPractisedAt: String? = nil
+}
+struct SharedRehearsal: Codable, Equatable {
+    let id: String; let roleId: String; let scenarioId: String; let expressionId: String; let mode: String
+    var gapId: String? = nil; var startedAt: String; var completedAt: String? = nil; var modelSeen: Bool
+}
+struct SharedChallenge: Codable, Equatable {
+    let id: String; let roleId: String; let mode: String; let milestone: Int; var startedAt: String
+    let scenarioIds: [String]; var completedScenarioIds: [String]; var completedAt: String? = nil
+}
+struct SharedExposure: Codable, Equatable { let dayKey: String; let firstSeenAt: String }

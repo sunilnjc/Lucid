@@ -1,962 +1,403 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  communicationGoals,
-  professionalRoles,
-  professionalWords,
-  seniorityLevels,
-  type GoalId,
-  type ProfessionalWord,
-  type RoleId,
-  type SeniorityId,
-  type SituationId,
-} from "../lib/professional-content";
-import {
-  createDailyPlan,
-  createWordMastery,
-  evaluateUsage,
-  isWordMastered,
-  reviewWord,
-  SRS_INTERVAL_DAYS,
-  type LearnerProfile,
-  type ReviewQuality,
-  type TaggedWord,
-  type UsageFeedback,
-  type WordMastery,
-} from "../lib/learning-engine";
+import { useLearningLanguage, LearningLanguageProvider, LearningLanguageChoice, LearningCoverageNote, EnglishLearningContentNotice } from "./LearningLanguage";
+import { koreanWordSupport } from "../lib/learning-locales";
+
+import { useCallback, useEffect, useState } from "react";
+import { communicationGoals, professionalLearningPaths, professionalRoles, professionalWords, seniorityLevels, type GoalId, type ProfessionalWord, type RoleId, type SeniorityId, type SituationId } from "../lib/professional-content";
+import { SRS_INTERVAL_DAYS, type ReviewQuality } from "../lib/learning-engine";
 import { allWords } from "../lib/vocabulary-data";
-
-type View = "today" | "practice" | "library" | "progress" | "settings";
-type LessonStatus = "not_started" | "in_progress" | "completed";
-
-type LearnerProfileState = {
-  roleId: RoleId;
-  seniorityId: SeniorityId;
-  situationIds: SituationId[];
-  goalIds: GoalId[];
-};
-
-type DailySession = {
-  id: string;
-  date: string;
-  roleId: RoleId;
-  situationId: SituationId;
-  wordIds: string[];
-  completedAt: string;
-};
-
-type UsageAttempt = {
-  sentence: string;
-  feedback: UsageFeedback;
-  checkedAt: string;
-  source: "written" | "spoken";
-};
-
-type QuizAttempt = {
-  id: string;
-  completedAt: string;
-  durationSeconds: number;
-  score: number;
-  total: number;
-  mistakeWordIds: string[];
-};
-
-type Settings = {
-  lessonTime: string;
-  timeZone: string;
-  notificationsEnabled: boolean;
-  generationMode: "advance-on-open" | "calendar-day";
-  difficulty: string;
-  audioRate: number;
-  textSize: "normal" | "large";
-};
-
-type AppState = {
-  version: number;
-  profile: LearnerProfileState | null;
-  introducedWordIds: string[];
-  masteryByWordId: Record<string, WordMastery>;
-  dailySessions: DailySession[];
-  usageAttempts: Record<string, UsageAttempt>;
-  betaFeedbackSubmittedAt: string | null;
-  lessonStatus: LessonStatus;
-  lessonWordProgress: number;
-  completedDays: number[];
-  difficultIds: string[];
-  favouriteIds: string[];
-  reviewedIds: string[];
-  masteryScores: Record<string, number>;
-  reviewDates: Record<string, string[]>;
-  nextReviewAt: Record<string, string>;
-  exerciseAnswers: Record<string, string>;
-  exerciseSubmitted: boolean;
-  exerciseRevealed: boolean;
-  quizAnswers: Record<string, string>;
-  quizAttempts: QuizAttempt[];
-  currentQuizSubmitted: boolean;
-  settings: Settings;
-  lastNotificationDate: string | null;
-};
-
-type LearningWord = TaggedWord & {
-  source: ProfessionalWord;
-};
-
-type SpeechRecognitionLike = {
-  lang: string;
-  interimResults: boolean;
-  continuous: boolean;
-  onresult: ((event: unknown) => void) | null;
-  onerror: (() => void) | null;
-  onend: (() => void) | null;
-  start: () => void;
-};
-
-const navItems: Array<{ id: View; label: string; mark: string }> = [
-  { id: "today", label: "Today", mark: "01" },
-  { id: "practice", label: "Practice", mark: "02" },
-  { id: "library", label: "Library", mark: "03" },
-  { id: "progress", label: "Progress", mark: "04" },
-  { id: "settings", label: "Settings", mark: "05" },
-];
+import { dailyIdioms } from "../lib/daily-idioms";
+import { dictionaryPage } from "../lib/list-pagination";
+import { contextEvidenceKey, exportPortableBackup, importPortableBackup, makeReviewEvidence } from "../lib/web-learning-state";
+import { useWebLearningState } from "../lib/web-learning-sync";
+import ExpressionPractice from "./ExpressionPractice";
+import DailyVocabulary, { DailyIdiomReviewSection, IdiomCollection, DictionaryPagination } from "./DailyVocabulary";
+import WebAccountPanel from "./WebAccountPanel";
+import PWAInstall from "./PWAInstall";
+import { contextualWord, createTapChallenge, completeGuidedWord, captureReviewResponse, isFrozenReviewIndependent, applyContextReview, applyExpressionCommit, practiceDates, contextStarted, effortPoints, stamp, dayAt, hideTerm, makePlan, currentStreak, reviewQueue, recordContextExposure, viewFromURL, urlForView, canRefreshApp, type View, type AppState, type State, type Plan, type Profile, type Settings } from "../lib/web-learning-ui";
+export { contextualWord, roleDailyWords, createTapChallenge } from "../lib/web-learning-ui";
+type Commit = (next: State | ((current: State) => State), expectedScopeKey?: string) => boolean;
 
 const initialState: AppState = {
-  version: 2,
-  profile: null,
-  introducedWordIds: [],
-  masteryByWordId: {},
-  dailySessions: [],
-  usageAttempts: {},
-  betaFeedbackSubmittedAt: null,
-  lessonStatus: "not_started",
-  lessonWordProgress: 0,
-  completedDays: [1, 2, 3, 4],
-  difficultIds: [],
-  favouriteIds: [],
-  reviewedIds: [],
-  masteryScores: {},
-  reviewDates: {},
-  nextReviewAt: {},
-  exerciseAnswers: {},
-  exerciseSubmitted: false,
-  exerciseRevealed: false,
-  quizAnswers: {},
-  quizAttempts: [],
-  currentQuizSubmitted: false,
-  settings: {
-    lessonTime: "09:00",
-    timeZone: "Asia/Dubai",
-    notificationsEnabled: false,
-    generationMode: "calendar-day",
-    difficulty: "upper-B2-to-C1",
-    audioRate: 0.9,
-    textSize: "normal",
-  },
-  lastNotificationDate: null,
+  version: 3, profile: null, introducedWordIds: [], masteryByWordId: {}, dailySessions: [], usageAttempts: {}, betaFeedbackSubmittedAt: null,
+  lessonStatus: "not_started", lessonWordProgress: 0, completedDays: [], difficultIds: [], favouriteIds: [], reviewedIds: [], masteryScores: {}, reviewDates: {}, nextReviewAt: {},
+  exerciseAnswers: {}, exerciseSubmitted: false, exerciseRevealed: false, quizAnswers: {}, quizAttempts: [], currentQuizSubmitted: false,
+  settings: { lessonTime: "09:00", timeZone: "Etc/UTC", notificationsEnabled: false, generationMode: "calendar-day", difficulty: "upper-B2-to-C1", audioRate: 0.9, textSize: "normal", dailyWordCount: 3 }, lastNotificationDate: null,
 };
-
-const usefulnessScore = { essential: 5, high: 4, specialist: 3 } as const;
-const difficultyScore = { "upper-b2": 3, c1: 4 } as const;
-const seniorityForEngine: Record<SeniorityId, LearnerProfile["seniority"]> = {
-  "early-career": "entry",
-  "experienced-contributor": "mid",
-  manager: "senior",
-  "senior-leader": "lead",
-  executive: "executive",
-};
-
-const learningWords: readonly LearningWord[] = professionalWords.map((word) => ({
-  id: word.id,
-  active: word.learningMode === "active",
-  roles: word.roles,
-  situations: word.situations,
-  goals: word.goals,
-  usefulness: usefulnessScore[word.usefulness],
-  difficulty: difficultyScore[word.difficulty],
-  source: word,
-}));
-
-function mergeState(saved: unknown): AppState {
-  if (!saved || typeof saved !== "object") return initialState;
-  const next = saved as Partial<AppState>;
-  return {
-    ...initialState,
-    ...next,
-    settings: { ...initialState.settings, ...(next.settings ?? {}) },
-    masteryByWordId: next.masteryByWordId ?? {},
-    dailySessions: next.dailySessions ?? [],
-    introducedWordIds: next.introducedWordIds ?? [],
-    usageAttempts: next.usageAttempts ?? {},
-  };
-}
-
-function engineProfile(profile: LearnerProfileState): LearnerProfile {
-  return {
-    role: profile.roleId,
-    seniority: seniorityForEngine[profile.seniorityId],
-    situations: profile.situationIds,
-    goals: profile.goalIds,
-  };
-}
-
-function formatDisplayDate(date: string, timeZone: string) {
-  return new Intl.DateTimeFormat("en-GB", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    timeZone,
-  }).format(new Date(date + "T12:00:00Z"));
-}
-
-function feedbackLabel(score: number) {
-  if (score >= 85) return "Strong professional use";
-  if (score >= 65) return "Promising — refine it";
-  return "Needs more context";
-}
-
-function getWord(id: string) {
-  return professionalWords.find((word) => word.id === id);
-}
-
-function consecutiveStreak(sessions: DailySession[]) {
-  const dates = [...new Set(sessions.map((session) => session.date))].sort().reverse();
-  if (!dates.length) return 0;
-  let streak = 1;
-  for (let index = 1; index < dates.length; index += 1) {
-    const previous = new Date(dates[index - 1] + "T00:00:00Z").getTime();
-    const current = new Date(dates[index] + "T00:00:00Z").getTime();
-    if ((previous - current) / 86_400_000 !== 1) break;
-    streak += 1;
-  }
-  return streak;
-}
-
-export default function VocabularyApp({
-  initialDate,
-  initialGreeting,
-}: {
-  initialDate: string;
-  initialGreeting: string;
-}) {
-  const [view, setView] = useState<View>("today");
-  const [state, setState] = useState<AppState>(initialState);
-  const [syncReady, setSyncReady] = useState(false);
-  const [syncLabel, setSyncLabel] = useState("Connecting…");
-  const [editingProfile, setEditingProfile] = useState(false);
-  const [practiceDrafts, setPracticeDrafts] = useState<Record<string, string>>({});
-  const [listeningWordId, setListeningWordId] = useState<string | null>(null);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+const navItems: { id: View; label: string; mark: string }[] = [
+  { id: "today", label: "Today", mark: "01" }, { id: "courses", label: "Courses", mark: "02" }, { id: "practice", label: "Review", mark: "03" },
+  { id: "idioms", label: "Idioms", mark: "04" }, { id: "express", label: "Express", mark: "05" }, { id: "library", label: "Library", mark: "06" }, { id: "progress", label: "Progress", mark: "07" }, { id: "settings", label: "Settings", mark: "08" },
+];
+function useLearningDay(timeZone: string, fallback: string) {
+  const [day, setDay] = useState(fallback);
   useEffect(() => {
-    let active = true;
-    const deviceId = window.localStorage.getItem("lucid-device-id") ?? crypto.randomUUID();
-    window.localStorage.setItem("lucid-device-id", deviceId);
-    fetch("/api/state", { headers: { "x-lucid-device-id": deviceId } })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Unable to load saved progress");
-        return response.json() as Promise<{ state: unknown }>;
-      })
-      .then(({ state: saved }) => {
-        if (!active) return;
-        setState(mergeState(saved));
-        setSyncLabel("Progress saved");
-      })
-      .catch(() => {
-        if (!active) return;
-        const cached = window.localStorage.getItem("lucid-offline-state");
-        if (cached) {
-          try {
-            setState(mergeState(JSON.parse(cached)));
-          } catch {
-            // Ignore a corrupt device cache; durable state remains authoritative.
-          }
-        }
-        setSyncLabel("Offline — progress is cached");
-      })
-      .finally(() => {
-        if (active) setSyncReady(true);
-      });
-    return () => {
-      active = false;
-    };
+    const update = () => setDay(dayAt(timeZone)); update();
+    const timer = window.setInterval(update, 30_000);
+    window.addEventListener("focus", update); document.addEventListener("visibilitychange", update);
+    return () => { window.clearInterval(timer); window.removeEventListener("focus", update); document.removeEventListener("visibilitychange", update); };
+  }, [timeZone]);
+  return day;
+}
+export default function VocabularyApp(props: { initialDate: string; initialGreeting: string }) {
+  return <LearningLanguageProvider><VocabularyAppContent {...props} /></LearningLanguageProvider>;
+}
+
+function VocabularyAppContent({ initialDate, initialGreeting }: { initialDate: string; initialGreeting: string }) {
+  const { locale, t } = useLearningLanguage();
+  const { state, ready, status, error, commit, retrySync, recoverFromBackup, scopeKey, suspendForAccountChange, refreshIdentity, importLegacyProgress } = useWebLearningState(initialState);
+  const [view, setView] = useState<View>("today"); const [viewHydrated, setViewHydrated] = useState(false);
+  const [editingProfileScope, setEditingProfileScope] = useState<string | null>(null);
+  const editingProfile = editingProfileScope === scopeKey;
+  const [accountDraft, setAccountDraft] = useState(false); const [settingsDraft, setSettingsDraft] = useState(false);
+  useEffect(() => {
+    const followURL = () => { setView(viewFromURL(window.location.href)); setViewHydrated(true); };
+    followURL(); window.addEventListener("popstate", followURL);
+    return () => window.removeEventListener("popstate", followURL);
   }, []);
-
+  const day = useLearningDay(state.settings.timeZone, initialDate); const profile = state.profile;
+  const role = professionalRoles.find((item) => item.id === profile?.roleId);
+  const key = profile ? `${day}:${profile.roleId}` : ""; const plan = state.learningV3.rolePlans[key];
   useEffect(() => {
-    const retry = () => setSyncLabel("Reconnecting…");
-    window.addEventListener("online", retry);
-    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
-    return () => window.removeEventListener("online", retry);
-  }, []);
-
+    if (!ready || !profile || day !== dayAt(state.settings.timeZone) || plan) return;
+    commit((current) => {
+      if (current.profile?.roleId !== profile.roleId || dayAt(current.settings.timeZone) !== day || current.learningV3.rolePlans[key]) return current;
+      return { ...current, learningV3: { ...current.learningV3, rolePlans: { ...current.learningV3.rolePlans, [key]: makePlan(current, profile.roleId, day) }, updatedAt: stamp() } };
+    }, scopeKey);
+  }, [ready, profile, day, key, plan, commit, scopeKey, state.settings.timeZone]);
   useEffect(() => {
-    if (!syncReady) return;
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    queueMicrotask(() => setSyncLabel("Saving…"));
-    window.localStorage.setItem("lucid-offline-state", JSON.stringify(state));
-    saveTimer.current = setTimeout(() => {
-      const deviceId = window.localStorage.getItem("lucid-device-id") ?? crypto.randomUUID();
-      window.localStorage.setItem("lucid-device-id", deviceId);
-      fetch("/api/state", {
-        method: "PUT",
-        headers: { "content-type": "application/json", "x-lucid-device-id": deviceId },
-        body: JSON.stringify({ state }),
-      })
-        .then((response) => {
-          if (!response.ok) throw new Error("Save failed");
-          setSyncLabel("Progress saved");
-        })
-        .catch(() => setSyncLabel("Offline — progress is cached"));
-    }, 550);
-    return () => {
-      if (saveTimer.current) clearTimeout(saveTimer.current);
-    };
-  }, [state, syncReady]);
-
+    if (!ready || !state.settings.notificationsEnabled || typeof Notification === "undefined") return;
+    const check = () => {
+      const date = dayAt(state.settings.timeZone); const time = new Intl.DateTimeFormat("en-GB", { timeZone: state.settings.timeZone, hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date());
+      if (Notification.permission === "granted" && time >= state.settings.lessonTime && state.lastNotificationDate !== date) {
+        new Notification("Your Lucid practice is ready", { body: "A few useful words and a short professional practice." });
+        commit((current) => ({ ...current, lastNotificationDate: date }), scopeKey);
+      }
+    }; check(); const timer = window.setInterval(check, 60_000); return () => window.clearInterval(timer);
+  }, [ready, state.settings, state.lastNotificationDate, commit, scopeKey]);
+  const navigate = (next: View) => { if (status === "error") return; if (viewFromURL(window.location.href) !== next) window.history.pushState({ lucidView: next }, "", urlForView(window.location.href, next)); setView(next); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const guarded = (mutate: (current: State, currentPlan: Plan) => State) => {
+    if (status === "error") return false;
+    let accepted = false; const capturedScope = scopeKey;
+    const saved = commit((current) => {
+      const active = current.learningV3.rolePlans[key];
+      if (!profile || current.profile?.roleId !== profile.roleId || dayAt(current.settings.timeZone) !== day || !active || active.id !== plan?.id) return current;
+      const next = mutate(current, active); accepted = next !== current; return next;
+    }, capturedScope);
+    return saved && accepted;
+  };
+  const roleDue = profile ? reviewQueue(state, day, profile.roleId) : [];
+  const selectedRoleId = profile?.roleId;
+  const expose = useCallback((contextIds: readonly string[]) => {
+    let accepted = false;
+    const saved = commit((current) => {
+      if (!selectedRoleId || current.profile?.roleId !== selectedRoleId || dayAt(current.settings.timeZone) !== day) return current;
+      const next = recordContextExposure(current, contextIds, day); accepted = true; return next;
+    }, scopeKey); return accepted && saved;
+  }, [selectedRoleId, day, scopeKey, commit]);
   useEffect(() => {
-    if (!state.settings.notificationsEnabled || typeof Notification === "undefined") return;
-    const checkReminder = () => {
-      const now = new Date();
-      const localDate = new Intl.DateTimeFormat("en-CA", {
-        timeZone: state.settings.timeZone,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-      }).format(now);
-      const localTime = new Intl.DateTimeFormat("en-GB", {
-        timeZone: state.settings.timeZone,
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      }).format(now);
-      if (
-        Notification.permission === "granted" &&
-        localTime >= state.settings.lessonTime &&
-        state.lastNotificationDate !== localDate
-      ) {
-        new Notification("Your role-specific Lucid session is ready.", {
-          body: "Three active words, due review, and one workplace mission.",
-        });
-        setTimeout(() => setState((current) => ({ ...current, lastNotificationDate: localDate })), 0);
-      }
-    };
-    checkReminder();
-    const reminderTimer = window.setInterval(checkReminder, 60_000);
-    return () => window.clearInterval(reminderTimer);
-  }, [state.lastNotificationDate, state.settings.lessonTime, state.settings.notificationsEnabled, state.settings.timeZone]);
-
-  const profile = state.profile;
-  const selectedRole = profile ? professionalRoles.find((role) => role.id === profile.roleId) : undefined;
-  const todaySession = state.dailySessions.find((session) => session.date === initialDate);
-  const eligibleSituations = selectedRole?.situations.filter((item) => profile?.situationIds.includes(item.id)) ?? [];
-  const situationIndex = eligibleSituations.length ? Number(initialDate.replaceAll("-", "")) % eligibleSituations.length : 0;
-  const selectedSituation = todaySession
-    ? selectedRole?.situations.find((item) => item.id === todaySession.situationId)
-    : eligibleSituations[situationIndex] ?? selectedRole?.situations[0];
-  const selectedGoal = communicationGoals.find((goal) =>
-    profile?.goalIds.includes(goal.id) && (!selectedSituation || selectedSituation.goalIds.includes(goal.id))
-  ) ?? communicationGoals.find((goal) => profile?.goalIds.includes(goal.id));
-
-  const plan = useMemo(() => {
-    if (!profile) return null;
-    return createDailyPlan({
-      date: initialDate,
-      profile: engineProfile(profile),
-      words: learningWords,
-      introducedWordIds: state.introducedWordIds,
-      masteryByWordId: state.masteryByWordId,
-      newWordCount: 3,
-    });
-  }, [initialDate, profile, state.introducedWordIds, state.masteryByWordId]);
-
-  const activeWords = useMemo(() => {
-    if (todaySession) {
-      return todaySession.wordIds.map(getWord).filter((word): word is ProfessionalWord => Boolean(word));
-    }
-    return plan?.activeNewWords.map((item) => item.word.source) ?? [];
-  }, [plan, todaySession]);
-
-  const navigate = (next: View) => {
-    setView(next);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    if (!ready || !viewHydrated || !profile || view !== "today" || !plan) return;
+    const ids = plan.wordIds.map((id) => contextEvidenceKey(id, profile.roleId)).filter((id) => state.learningV3.exposedOn[id] !== day);
+    if (ids.length) expose(ids);
+  }, [ready, viewHydrated, profile, view, plan, state.learningV3.exposedOn, day, expose]);
+  const saveProfile = (next: Profile, dailyWordCount: 1 | 2 | 3) => {
+    if (commit((current) => ({ ...current, profile: next, settings: { ...current.settings, dailyWordCount, timeZone: current.profile ? current.settings.timeZone : Intl.DateTimeFormat().resolvedOptions().timeZone }, learningV3: { ...current.learningV3, profileUpdatedAt: stamp(), updatedAt: stamp() } }), scopeKey)) { setEditingProfileScope(null); navigate("today"); }
   };
-
-  const saveProfile = (nextProfile: LearnerProfileState) => {
-    setState((current) => ({ ...current, profile: nextProfile, version: 2 }));
-    setEditingProfile(false);
-    setView("today");
-  };
-
-  const speak = (word: ProfessionalWord) => {
-    if (!("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(word.term);
-    utterance.lang = "en-GB";
-    utterance.rate = state.settings.audioRate;
-    window.speechSynthesis.speak(utterance);
-  };
-
-  const checkUsage = (word: ProfessionalWord, source: "written" | "spoken", transcript?: string) => {
-    const sentence = (transcript ?? practiceDrafts[word.id] ?? "").trim();
-    if (!sentence) return;
-    const partOfSpeech = ["noun", "verb", "adjective", "adverb"].includes(word.partOfSpeech)
-      ? word.partOfSpeech as "noun" | "verb" | "adjective" | "adverb"
-      : undefined;
-    const feedback = evaluateUsage({
-      sentence,
-      targetWord: word.term,
-      partOfSpeech,
-      meaning: word.meaning,
-      expectedCollocations: word.collocations,
-    });
-    setPracticeDrafts((current) => ({ ...current, [word.id]: sentence }));
-    setState((current) => ({
-      ...current,
-      usageAttempts: {
-        ...current.usageAttempts,
-        [word.id]: {
-          sentence,
-          feedback,
-          checkedAt: new Date().toISOString(),
-          source,
-        },
-      },
-    }));
-  };
-
-  const startSpokenPractice = (word: ProfessionalWord) => {
-    const recognitionConstructor = (
-      window as unknown as {
-        SpeechRecognition?: new () => SpeechRecognitionLike;
-        webkitSpeechRecognition?: new () => SpeechRecognitionLike;
-      }
-    ).SpeechRecognition ?? (
-      window as unknown as {
-        webkitSpeechRecognition?: new () => SpeechRecognitionLike;
-      }
-    ).webkitSpeechRecognition;
-    if (!recognitionConstructor) {
-      setPracticeDrafts((current) => ({
-        ...current,
-        [word.id]: current[word.id] ?? "Spoken practice is not supported in this browser. Type what you would say instead.",
-      }));
-      return;
-    }
-    const recognition = new recognitionConstructor();
-    recognition.lang = "en-GB";
-    recognition.interimResults = false;
-    recognition.continuous = false;
-    setListeningWordId(word.id);
-    recognition.onresult = (event: unknown) => {
-      const result = event as { results?: { [key: number]: { [key: number]: { transcript?: string } } } };
-      const transcript = result.results?.[0]?.[0]?.transcript?.trim() ?? "";
-      if (transcript) checkUsage(word, "spoken", transcript);
-    };
-    recognition.onerror = () => setListeningWordId(null);
-    recognition.onend = () => setListeningWordId(null);
-    recognition.start();
-  };
-
-  const completeToday = () => {
-    if (!profile || !selectedSituation || todaySession || activeWords.length === 0) return;
-    const masteryByWordId = { ...state.masteryByWordId };
-    for (const word of activeWords) {
-      masteryByWordId[word.id] = masteryByWordId[word.id] ?? createWordMastery(word.id, initialDate);
-    }
-    const session: DailySession = {
-      id: crypto.randomUUID(),
-      date: initialDate,
-      roleId: profile.roleId,
-      situationId: selectedSituation.id,
-      wordIds: activeWords.map((word) => word.id),
-      completedAt: new Date().toISOString(),
-    };
-    setState((current) => ({
-      ...current,
-      lessonStatus: "completed",
-      lessonWordProgress: 3,
-      introducedWordIds: [...new Set([...current.introducedWordIds, ...session.wordIds])],
-      masteryByWordId,
-      dailySessions: [...current.dailySessions, session],
-    }));
-  };
-
-  const recordReview = (wordId: string, quality: ReviewQuality) => {
-    const existing = state.masteryByWordId[wordId] ?? createWordMastery(wordId, initialDate);
-    const next = reviewWord(existing, {
-      reviewedOn: initialDate,
-      quality,
-      productive: quality >= 2,
-    });
-    setState((current) => ({
-      ...current,
-      masteryByWordId: { ...current.masteryByWordId, [wordId]: next },
-      reviewedIds: [...new Set([...current.reviewedIds, wordId])],
-      difficultIds: quality < 2
-        ? [...new Set([...current.difficultIds, wordId])]
-        : current.difficultIds.filter((id) => id !== wordId),
-    }));
-  };
-
-  const updateSettings = <K extends keyof Settings>(key: K, value: Settings[K]) => {
-    setState((current) => ({ ...current, settings: { ...current.settings, [key]: value } }));
-  };
-
-  const requestNotifications = async (enabled: boolean) => {
-    let allowed = enabled;
-    if (enabled && typeof Notification !== "undefined" && Notification.permission === "default") {
-      allowed = (await Notification.requestPermission()) === "granted";
-    }
-    updateSettings("notificationsEnabled", allowed);
-  };
-
-  if (!syncReady) {
-    return <LoadingScreen />;
-  }
-
-  if (!profile || editingProfile) {
-    return <Onboarding initialProfile={profile} onComplete={saveProfile} onCancel={profile ? () => setEditingProfile(false) : undefined} />;
-  }
-
-  return (
-    <div className={"app-shell phase-two text-" + state.settings.textSize}>
-      <a className="skip-link" href="#main-content">Skip to content</a>
-      <header className="topbar">
-        <button className="wordmark" onClick={() => navigate("today")} aria-label="Lucid home">
-          <span className="wordmark-glyph" aria-hidden="true">L</span>
-          <span>Lucid</span>
-          <small>Professional English</small>
-        </button>
-        <div className="topbar-meta">
-          <span className="sync-status" role="status" aria-live="polite"><i aria-hidden="true" />{syncLabel}</span>
-          <span className="time-chip">{selectedRole?.shortLabel} · {seniorityLevels.find((level) => level.id === profile.seniorityId)?.label}</span>
-          <span className="avatar" aria-label={"Learning profile: " + selectedRole?.label}>{selectedRole?.shortLabel.slice(0, 1)}</span>
-        </div>
-      </header>
-
-      <aside className="sidebar" aria-label="Primary navigation">
-        <nav>
-          {navItems.map((item) => (
-            <button key={item.id} className={view === item.id ? "active" : ""} aria-current={view === item.id ? "page" : undefined} onClick={() => navigate(item.id)}>
-              <span>{item.mark}</span>{item.label}
-              {item.id === "practice" && <b>{Math.min(99, plan?.dueReviews.length ?? 0)}</b>}
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-note role-note">
-          <span>YOUR PROFESSIONAL PATH</span>
-          <p>{selectedRole?.shortLabel}</p>
-          <small>{selectedGoal?.label ?? "Precise communication"}</small>
-        </div>
-      </aside>
-
-      <main id="main-content" className="main-content">
-        {view === "today" && selectedRole && selectedSituation && (
-          <TodayView
-            date={initialDate}
-            greeting={initialGreeting}
-            role={selectedRole}
-            situation={selectedSituation}
-            goalPrompt={selectedGoal?.coachingPrompt}
-            activeWords={activeWords}
-            dueCount={plan?.dueReviews.length ?? 0}
-            completed={Boolean(todaySession)}
-            attempts={state.usageAttempts}
-            drafts={practiceDrafts}
-            listeningWordId={listeningWordId}
-            setDrafts={setPracticeDrafts}
-            speak={speak}
-            checkUsage={checkUsage}
-            startSpokenPractice={startSpokenPractice}
-            completeToday={completeToday}
-            navigate={navigate}
-            displayDate={formatDisplayDate(initialDate, state.settings.timeZone)}
-          />
-        )}
-        {view === "practice" && (
-          <PracticeView
-            dueReviews={plan?.dueReviews ?? []}
-            masteryByWordId={state.masteryByWordId}
-            recordReview={recordReview}
-            speak={speak}
-          />
-        )}
-        {view === "library" && (
-          <LibraryView profile={profile} speak={speak} />
-        )}
-        {view === "progress" && (
-          <ProgressView state={state} dueCount={plan?.dueReviews.length ?? 0} />
-        )}
-        {view === "settings" && (
-          <SettingsView
-            state={state}
-            roleLabel={selectedRole?.label ?? ""}
-            requestNotifications={requestNotifications}
-            updateSettings={updateSettings}
-            editProfile={() => setEditingProfile(true)}
-            markFeedbackSubmitted={() => setState((current) => ({ ...current, betaFeedbackSubmittedAt: new Date().toISOString() }))}
-          />
-        )}
-      </main>
-
-      <nav className="mobile-nav" aria-label="Mobile navigation">
-        {navItems.map((item) => (
-          <button key={item.id} className={view === item.id ? "active" : ""} aria-current={view === item.id ? "page" : undefined} onClick={() => navigate(item.id)}>
-            <span>{item.mark}</span>{item.label}
-          </button>
-        ))}
-      </nav>
+  const bookmark = (id: string) => commit((current) => {
+    const selected = !current.favouriteIds.includes(id); return { ...current, favouriteIds: selected ? [...current.favouriteIds, id] : current.favouriteIds.filter((item) => item !== id), learningV3: { ...current.learningV3, favouriteChanges: { ...current.learningV3.favouriteChanges, [id]: { selected, updatedAt: stamp() } }, updatedAt: stamp() } };
+  }, scopeKey);
+  const canReload = canRefreshApp({ ready: ready && viewHydrated, hasProfile: Boolean(profile), editingProfile, status, accountDraft, settingsDraft });
+  // Account controls stay mounted while identity requests suspend learner UI.
+  const surround = (content: React.ReactNode) => <div lang={locale} className={`lucid-root ${profile && !editingProfile ? "lucid-root-learning" : ""}`}>
+    <div className="app-tools">
+    <div lang="en"><PWAInstall canReload={canReload} prepareReload={() => canReload} /></div>
+    <div lang={locale} className="account-access" hidden={Boolean(profile) && !editingProfile && view !== "settings"}>
+      <WebAccountPanel language={locale} scopeKey={scopeKey} onIdentityWillChange={suspendForAccountChange} onIdentityChange={refreshIdentity} onImportLegacy={importLegacyProgress} onDraftChange={setAccountDraft} />
     </div>
-  );
-}
-
-function LoadingScreen() {
-  return (
-    <main className="loading-screen">
-      <span className="wordmark-glyph" aria-hidden="true">L</span>
-      <h1>Lucid</h1>
-      <p>Preparing your professional English path…</p>
+    </div>
+    {content}
+  </div>;
+  if (!ready || !viewHydrated) return surround(<main className="loading-screen"><span className="wordmark-glyph">L</span><h1>Lucid</h1><p>{t("Preparing your professional English path…")}</p></main>);
+  if (!profile || editingProfile) return surround(<>
+    <div hidden={view === "idioms"}><Onboarding key={`${scopeKey}:${editingProfile ? "edit" : "new"}`} initialProfile={profile} dailyWordCount={state.settings.dailyWordCount} onSave={saveProfile} onRecover={(value, restoreProfile) => recoverFromBackup(value, restoreProfile, scopeKey)} onCancel={profile && status !== "error" ? () => setEditingProfileScope(null) : undefined} onExploreIdioms={() => navigate("idioms")} error={error} /></div>
+    {view === "idioms" && <div className="onboarding-shell web-learning"><header className="onboarding-header"><div className="static-wordmark"><span className="wordmark-glyph">L</span><strong>Lucid</strong><small>{t("Professional English")}</small></div><LearningLanguageChoice compact /></header><main className="onboarding-main"><IdiomCollection key={`${scopeKey}:${day}`} state={state} day={day} profile={profile} scopeKey={scopeKey} commit={commit} blocked={status === "error"} onBack={() => navigate("today")} onSetup={() => navigate("today")} /></main></div>}
+  </>);
+  let greeting = initialGreeting;
+  try { const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: state.settings.timeZone, hour: "2-digit", hour12: false }).format(new Date())); greeting = hour < 12 ? "Good morning." : hour < 18 ? "Good afternoon." : "Good evening."; } catch { /* Keep the server greeting until the time zone is corrected. */ }
+  const displayDate = new Intl.DateTimeFormat(locale === "ko" ? "ko-KR" : "en-GB", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" }).format(new Date(day + "T12:00:00Z"));
+  return surround(<div className={`app-shell web-learning text-${state.settings.textSize}`}>
+    <a className="skip-link" href="#main-content">{t("Skip to content")}</a>
+    <header className="topbar"><button className="wordmark" onClick={() => navigate("today")} aria-label={t("Lucid home")}><span className="wordmark-glyph" aria-hidden="true">L</span><span>Lucid<small>{t("Professional English")}</small></span></button><div className="topbar-meta"><LearningLanguageChoice compact /><span className="role-chip">{t(role?.shortLabel ?? "")}</span><span className="sync-status" role="status">{status === "offline" ? t("Saved locally · offline") : status === "error" ? t("Save needs retry") : status === "syncing" ? t("Syncing learning progress") : t(status)}</span></div></header>
+    <aside className="sidebar"><nav aria-label={t("Primary navigation")}>{navItems.map((item) => <button key={item.id} className={view === item.id ? "active" : ""} aria-current={view === item.id ? "page" : undefined} onClick={() => navigate(item.id)}><span aria-hidden="true">{item.mark}</span>{t(item.label)}{item.id === "practice" && roleDue.length > 0 && <b>{roleDue.length}</b>}</button>)}</nav><div className="sidebar-note"><span>{t("YOUR PROFESSIONAL PATH")}</span><p>{t(role?.shortLabel ?? "")}</p><small>{t(seniorityLevels.find((item) => item.id === profile.seniorityId)?.label ?? "")}</small></div></aside>
+    <main id="main-content" className="main-content">
+      <LearningCoverageNote />
+      {view !== "today" && view !== "practice" && view !== "idioms" && <EnglishLearningContentNotice />}
+      {error && <div className="save-notice" role="alert"><p>{t(error)}</p><button onClick={retrySync}>{status === "error" ? t("Retry saving") : t("Retry connection")}</button>{status === "error" && <RecoveryPanel onRestore={(value, restoreProfile) => recoverFromBackup(value, restoreProfile, scopeKey)} />}</div>}
+      {view === "today" && <DailyVocabulary key={`${scopeKey}:${key}`} state={state} day={day} profile={profile} scopeKey={scopeKey} commit={commit} blocked={status === "error"} dateLabel={displayDate} greeting={greeting} dueCount={roleDue.length} navigate={navigate}><Today state={state} day={day} plan={plan} profile={profile} guarded={guarded} bookmark={bookmark} navigate={navigate} dueCount={roleDue.length} /></DailyVocabulary>}
+      {view === "idioms" && <IdiomCollection key={`${scopeKey}:${day}:${profile.roleId}`} state={state} day={day} profile={profile} scopeKey={scopeKey} commit={commit} blocked={status === "error"} onBack={() => navigate("today")} />}
+      {view === "courses" && <Courses key={`${scopeKey}:${profile.roleId}`} state={state} day={day} profile={profile} commit={commit} scopeKey={scopeKey} navigate={navigate} expose={expose} />}
+      {view === "practice" && <Review key={`${scopeKey}:${day}:${profile.roleId}`} state={state} day={day} profile={profile} commit={commit} scopeKey={scopeKey} blocked={status === "error"} />}
+      {view === "express" && <ExpressionPractice key={`${scopeKey}:${day}:${profile.roleId}`} roleId={profile.roleId} learnedWordIds={Object.keys(state.learningV3.contextIntroducedOn).filter((id) => id.endsWith(`::${profile.roleId}`)).map((id) => id.split("::")[0])} activeDates={practiceDates(state)} lastActiveDate={practiceDates(state).at(-1)} today={day} savedDraft={state.learningV3.expressionDraft ?? ""} exposedOn={state.learningV3.exposedOn} onCommit={(draft, input, exposedIds, exposedAtISO) => {
+        if (input?.date && input.date !== day) return false;
+        const evidence = input ? makeReviewEvidence({ ...input, id: input.attemptId, date: day }) : undefined;
+        if (input && !evidence) return false;
+        let accepted = false;
+        const saved = commit((current) => {
+          if (current.profile?.roleId !== profile.roleId || dayAt(current.settings.timeZone) !== day) return current;
+          const next = applyExpressionCommit(current, { roleId: profile.roleId, date: day, draft, evidence: evidence ?? undefined, exposedContextIds: exposedIds, exposedAtISO });
+          accepted = next !== current;
+          return next;
+        }, scopeKey); return accepted && saved;
+      }} />}
+      {view === "library" && <Library key={`${scopeKey}:${profile.roleId}`} profile={profile} state={state} bookmark={bookmark} expose={expose} day={day} blocked={status === "error"} />}
+      {view === "progress" && <Progress state={state} day={day} roleId={profile.roleId} dueCount={roleDue.length} />}
+      {view === "settings" && <SettingsPanel key={scopeKey} state={state} commit={commit} scopeKey={scopeKey} editProfile={() => setEditingProfileScope(scopeKey)} onDraftChange={setSettingsDraft} needsRecovery={status === "error"} onRecover={(value, restoreProfile) => recoverFromBackup(value, restoreProfile, scopeKey)} />}
     </main>
-  );
+    <nav className="mobile-nav" aria-label={t("Mobile navigation")}>{navItems.map((item) => <button key={item.id} className={view === item.id ? "active" : ""} aria-current={view === item.id ? "page" : undefined} onClick={() => navigate(item.id)}><span aria-hidden="true">{item.mark}</span>{t(item.label)}</button>)}</nav>
+  </div>);
 }
 
-function Onboarding({
-  initialProfile,
-  onComplete,
-  onCancel,
-}: {
-  initialProfile: LearnerProfileState | null;
-  onComplete: (profile: LearnerProfileState) => void;
-  onCancel?: () => void;
-}) {
-  const [step, setStep] = useState(initialProfile ? 1 : 0);
-  const [roleId, setRoleId] = useState<RoleId | "">(initialProfile?.roleId ?? "");
-  const [seniorityId, setSeniorityId] = useState<SeniorityId | "">(initialProfile?.seniorityId ?? "");
-  const [situationIds, setSituationIds] = useState<SituationId[]>(initialProfile?.situationIds ?? []);
-  const [goalIds, setGoalIds] = useState<GoalId[]>(initialProfile?.goalIds ?? []);
-  const role = professionalRoles.find((item) => item.id === roleId);
+export function Onboarding({ initialProfile, dailyWordCount, onSave, onRecover, onCancel, onExploreIdioms, error }: { initialProfile: Profile | null; dailyWordCount: 1 | 2 | 3; onSave: (profile: Profile, dailyWordCount: 1 | 2 | 3) => void; onRecover: (value: unknown, restoreProfile?: boolean) => Promise<boolean>; onCancel?: () => void; onExploreIdioms?: () => void; error: string | null }) {
+  const { t } = useLearningLanguage();
+  const [step, setStep] = useState(0); const [roleId, setRoleId] = useState<RoleId | "">(initialProfile?.roleId ?? ""); const [seniorityId, setSeniorityId] = useState<SeniorityId | "">(initialProfile?.seniorityId ?? "");
+  const [situations, setSituations] = useState<SituationId[]>(initialProfile?.situationIds ?? []); const [goals, setGoals] = useState<GoalId[]>(initialProfile?.goalIds ?? []);
+  const [pace, setPace] = useState<1 | 2 | 3>(dailyWordCount ?? 3);
+  const role = professionalRoles.find((item) => item.id === roleId); const headings = ["Where do you use English most?", "What communication do you own?", "Which moments matter every week?", "What would you like to do better?", "What pace feels manageable?"];
+  const allowed = step === 0 ? Boolean(roleId) : step === 1 ? Boolean(seniorityId) : step === 2 ? situations.length > 0 : step === 3 ? goals.length > 0 : true;
+  return <div className="onboarding-shell"><header className="onboarding-header"><div className="static-wordmark"><span className="wordmark-glyph">L</span><strong>Lucid</strong><small>{t("Professional English for your role")}</small></div><LearningLanguageChoice compact />{onCancel && <button onClick={onCancel}>{t("Cancel")}</button>}</header><main className="onboarding-main"><LearningCoverageNote /><span className="eyebrow">{t("YOUR LEARNING PATH · {step} OF 5", { step: step + 1 })}</span><h1>{t(headings[step])}</h1><p>{t("Learn one to three useful words at your own pace. Practise them in realistic workplace situations.")}</p>{error && <p role="alert" className="error-copy">{t(error)}</p>}
+    {onExploreIdioms && <div className="onboarding-idiom-entry"><p>{t("Explore idioms before setting up your course.")}</p><button className="secondary-button" onClick={onExploreIdioms}>{t("Explore all {count} idioms", { count: dailyIdioms.length })} →</button></div>}
+    <div className="choice-grid">
+      {step === 0 && professionalRoles.map((item) => <button aria-pressed={roleId === item.id} key={item.id} className={roleId === item.id ? "selected" : ""} onClick={() => { setRoleId(item.id); if (item.id !== roleId) { setSituations([]); setGoals([...item.defaultGoalIds.slice(0, 2)]); } }}><strong>{t(item.label)}</strong><small>{t(item.description)}</small></button>)}
+      {step === 1 && seniorityLevels.map((item) => <button key={item.id} aria-pressed={seniorityId === item.id} className={seniorityId === item.id ? "selected" : ""} onClick={() => setSeniorityId(item.id)}><strong>{t(item.label)}</strong><small>{t(item.communicationFocus)}</small></button>)}
+      {step === 2 && role?.situations.map((item) => <button key={item.id} aria-pressed={situations.includes(item.id)} className={situations.includes(item.id) ? "selected" : ""} onClick={() => setSituations((current) => current.includes(item.id) ? current.filter((value) => value !== item.id) : current.length < 3 ? [...current, item.id] : current)}><strong>{t(item.label)}</strong><small>{t(item.description)}</small></button>)}
+      {step === 3 && communicationGoals.map((item) => <button key={item.id} aria-pressed={goals.includes(item.id)} className={goals.includes(item.id) ? "selected" : ""} onClick={() => setGoals((current) => current.includes(item.id) ? current.filter((value) => value !== item.id) : current.length < 3 ? [...current, item.id] : current)}><strong>{t(item.label)}</strong><small>{t(item.outcome)}</small></button>)}
+      {step === 4 && ([1, 2, 3] as const).map((count) => <button key={count} aria-pressed={pace === count} className={pace === count ? "selected" : ""} onClick={() => setPace(count)}><strong>{t("{count} words per day", { count })}</strong><small>{count === 1 ? t("A small, sustainable step.") : count === 2 ? t("A little variety, with room to revisit.") : t("A focused collection for daily practice.")}</small></button>)}
+    </div><p className="muted">{step === 1 ? t("Career stage guides your context. It is separate from language ability.") : step === 2 || step === 3 ? t("Choose up to three.") : step === 4 ? t("Your course pace is separate from Today’s Words: five advanced words, with three optional extras and one daily idiom.") : t("You can change your role later without losing your learning history.")}</p><div className="onboarding-actions"><button className="secondary-button" disabled={step === 0} onClick={() => setStep(step - 1)}>{t("Back")}</button><button className="primary-button" disabled={!allowed} onClick={() => step < 4 ? setStep(step + 1) : roleId && seniorityId && onSave({ roleId, seniorityId, situationIds: situations, goalIds: goals }, pace)}>{step === 4 ? t("Build my daily path") : t("Continue")} <span aria-hidden="true">→</span></button></div>
+    <RecoveryPanel onRestore={onRecover} />
+  </main></div>;
+}
 
-  const chooseRole = (id: RoleId) => {
-    const nextRole = professionalRoles.find((item) => item.id === id);
-    setRoleId(id);
-    setSituationIds([]);
-    setGoalIds(nextRole?.defaultGoalIds.slice(0, 2) as GoalId[] ?? []);
+function WordGuidance({ word, roleId }: { word: ProfessionalWord; roleId?: RoleId }) {
+  const { locale, t } = useLearningLanguage();
+  const support = locale === "ko" && roleId ? koreanWordSupport(word.id, roleId) : undefined;
+  return <div className="word-guidance"><p className="word-meaning" lang="en">{word.meaning}</p>{locale === "ko" && roleId && (support ? <p className="korean-learning-support" lang="ko"><strong>{t("Korean meaning")}</strong>{support.meaning}{support.usage && <span>{support.usage}</span>}</p> : <p className="korean-translation-unavailable" lang="ko">{t("Korean support is not available for this entry yet. The original English guidance is shown.")}</p>)}<div className="usage-guidance"><div><small>{t("WHEN TO USE")}</small><p>{word.whenToUse}</p></div><div><small>{t("AVOID THIS")}</small><p>{word.avoidOrMisuse}</p></div></div><div className="collocation-list"><small>{t("COLLOCATIONS")}</small>{word.collocations.map((item) => <span key={item}>{item}</span>)}</div><blockquote lang="en">{word.example}</blockquote><small>{t("WORKPLACE MISSION")}</small><p>{word.mission}</p></div>;
+}
+function Today({ state, day, plan, profile, guarded, bookmark, navigate, dueCount }: { state: State; day: string; plan?: Plan; profile: Profile; guarded: (mutate: (current: State, plan: Plan) => State) => boolean; bookmark: (id: string) => boolean; navigate: (view: View) => void; dueCount: number }) {
+  const { t } = useLearningLanguage();
+  const [active, setActive] = useState(false); const [notice, setNotice] = useState(""); const [writtenDrafts, setWrittenDrafts] = useState<Record<string, string>>({});
+  if (!plan) return <div className="empty-state"><h1>{t("Preparing today’s words")}</h1><p>{t("Your daily plan will appear after it is saved on this device.")}</p></div>;
+  const words = plan.wordIds.map((id) => contextualWord(id, profile.roleId)).filter((item): item is ProfessionalWord => Boolean(item));
+  const complete = words.length > 0 && words.every((item) => plan.completedIds.includes(item.id));
+  const currentIndex = Math.min(plan.cursor, Math.max(0, words.length - 1)); const word = words[currentIndex];
+  const challenge = word ? createTapChallenge(word, profile.roleId) : undefined; const answer = word ? plan.answers[word.id] : undefined;
+  const correct = answer?.choiceId === challenge?.correctId; const selectedRole = professionalRoles.find((item) => item.id === profile.roleId);
+  const changeAnswer = (choiceId: string, helped = false) => {
+    if (!word || !challenge || plan.completedIds.includes(word.id)) return;
+    const saved = guarded((current, currentPlan) => {
+      const prior = currentPlan.answers[word.id] ?? { choiceId: "", wrongChoiceIds: [], helped: false, completed: false };
+      if (currentPlan.wordIds[currentPlan.cursor] !== word.id || prior.completed) return current;
+      const nextAnswer = { ...prior, choiceId: helped ? prior.choiceId : choiceId, helped: prior.helped || helped, wrongChoiceIds: !helped && choiceId !== challenge.correctId ? [...new Set([...(prior.wrongChoiceIds ?? []), choiceId])] : prior.wrongChoiceIds };
+      const exposed = helped || choiceId === challenge.correctId ? recordContextExposure(current, [contextEvidenceKey(word.id, profile.roleId)], day) : current;
+      return { ...exposed, learningV3: { ...exposed.learningV3, rolePlans: { ...exposed.learningV3.rolePlans, [currentPlan.id]: { ...currentPlan, answers: { ...currentPlan.answers, [word.id]: nextAnswer } } }, updatedAt: stamp() } };
+    }); if (!saved) setNotice("Your answer could not be saved. Please retry before continuing."); else setNotice("");
   };
-
-  const toggleSituation = (id: SituationId) => {
-    setSituationIds((current) => current.includes(id) ? current.filter((item) => item !== id) : current.length < 3 ? [...current, id] : current);
+  const advance = () => {
+    if (!word || !correct) return;
+    const saved = guarded((current) => completeGuidedWord(current, { key: plan.id, roleId: profile.roleId, date: day, currentDay: dayAt(current.settings.timeZone), wordId: word.id })    ); if (!saved) setNotice("We could not save this step. Your answer is still here; retry to continue."); else setNotice("");
   };
+  const move = (cursor: number) => { if (guarded((current, currentPlan) => ({ ...current, learningV3: { ...current.learningV3, rolePlans: { ...current.learningV3.rolePlans, [currentPlan.id]: { ...currentPlan, cursor } } } }))) { setNotice(""); return true; } setNotice("Could not save this position. Please retry."); return false; };
+  const saveDraft = (text: string) => word && guarded((current) => ({ ...current, learningV3: { ...current.learningV3, practiceDrafts: { ...current.learningV3.practiceDrafts, [word.id]: text } } }));
+  return <>
+    <div className="section-heading daily-course-heading"><div><span className="eyebrow">{t("YOUR COURSE · CHOSEN PACE")}</span><h2>{t("Your course practice")}</h2></div><div className="lesson-progress" aria-label={t("{count} of {total} words completed", { count: plan.completedIds.length, total: words.length })}><span>{t("{count} / {total} guided words", { count: plan.completedIds.length, total: words.length })}</span><progress max={Math.max(1, words.length)} value={plan.completedIds.length} /></div></div>
+    <EnglishLearningContentNotice /><section className="coach-hero"><div><span className="eyebrow">{t(selectedRole?.shortLabel ?? "")} · {t("YOUR DAILY PRACTICE")}</span><h2>{t("Learn less. Use more.")}</h2><p>{t("Choose the meaning, complete a sentence, or spot misleading guidance. Come back later to retrieve the words independently.")}</p><div className="hero-actions"><button className="primary-button" onClick={() => setActive(true)} disabled={!words.length || complete}>{complete ? t("Daily practice complete") : active ? t("Practice open below") : plan.completedIds.length || Object.keys(plan.answers).length ? t("Resume practice") : t("Start practice")}</button><button className="secondary-button" onClick={() => navigate("courses")}>{t("Explore my course")}</button>{dueCount > 0 && <button className="text-button" onClick={() => navigate("practice")}>{t("{count} words ready for review →", { count: dueCount })}</button>}</div></div><div className="mission-card"><small>{t("TODAY’S OUTCOME")}</small><strong>{complete ? t("You kept your practice going.") : t("Make one useful expression feel familiar.")}</strong><p>{t("Guided practice builds familiarity. Independent recall and lasting mastery are measured separately.")}</p></div></section>
+    {notice && <p className="save-notice" role="alert">{t(notice)}</p>}
+    {complete && <div className="completion-banner" role="status"><span aria-hidden="true">✓</span><div><strong>{t("Today’s guided practice is complete.")}</strong><p>{t("Your words are scheduled for spaced review. Try one in a fresh situation in Express.")}</p></div><button className="secondary-button" onClick={() => navigate("express")}>{t("Put it to work")}</button></div>}
+    {active && word && challenge && !complete && <section className="practice-lab" aria-label={t("Daily guided practice")}><div className="section-heading"><span className="eyebrow">{t("WORD {index} OF {total}", { index: currentIndex + 1, total: words.length })} · {challenge.kind}</span><button className="text-button" onClick={() => setActive(false)}>{t("Pause and save")}</button></div><h2>{challenge.prompt}</h2><p className="challenge-context">{challenge.context}</p><div className="challenge-options">{challenge.choices.map((choice) => <button key={choice.id} disabled={Boolean(correct) || plan.completedIds.includes(word.id)} aria-pressed={answer?.choiceId === choice.id} className={answer?.choiceId === choice.id ? correct ? "correct" : "incorrect" : ""} onClick={() => changeAnswer(choice.id)}>{choice.text}</button>)}</div>
+      {answer?.choiceId && <div className={correct ? "answer-feedback correct" : "answer-feedback incorrect"} role="status"><strong>{correct ? t("That’s the right choice.") : t("Try again.")}</strong><p>{correct ? challenge.explanation : challenge.choices.find((item) => item.id === answer.choiceId)?.explanation}</p>{!correct && <p>{t("Choose again, or open Help for the word’s guidance.")}</p>}</div>}
+      {answer?.helped && <div className="help-panel"><h3>{word.term}</h3><WordGuidance word={word} roleId={profile.roleId} /><p className="muted">{t("This is assisted practice. Help does not earn independent recall credit.")}</p></div>}
+      <div className="button-row"><button className="secondary-button" onClick={() => changeAnswer("", true)}>{t("Help")}</button><button className="secondary-button" disabled={currentIndex >= words.length - 1} onClick={() => move(Math.min(words.length - 1, currentIndex + 1))}>{t("Skip for now")}</button><button className="primary-button" disabled={!correct || plan.completedIds.includes(word.id)} onClick={advance}>{t("Save and continue")}</button></div>
+      <details className="optional-stretch"><summary>{t("Optional written practice")}</summary><p>{word.mission} {t("Use fictional details. This draft stays on this device.")}</p><label htmlFor="daily-written">{t("Your workplace sentence")}</label><textarea id="daily-written" rows={4} value={writtenDrafts[word.id] ?? state.learningV3.practiceDrafts[word.id] ?? ""} onChange={(event) => { const text = event.target.value; setWrittenDrafts((current) => ({ ...current, [word.id]: text })); if (!saveDraft(text)) setNotice("Your text remains here. Retry saving before leaving this page."); }} placeholder={t("Write what you might say in a meeting or email.")} /><p className="muted">{t("Written practice is a stretch. It is not required to complete the guided question.")}</p></details>
+    </section>}
+    <section><div className="section-heading"><div><span className="eyebrow">{t("COURSE WORDS")}</span><h2>{t("Your focused course collection")}</h2></div><p>{t("{count} words at your chosen pace", { count: words.length })}</p></div>{words.length ? <div className="professional-word-grid">{words.map((entry, index) => <article className="professional-word-card" key={entry.id}><div className="card-top"><span>{plan.completedIds.includes(entry.id) ? t("Practised ✓") : t("To practise")} · {entry.learningMode}</span><button className="bookmark-button" aria-pressed={state.favouriteIds.includes(entry.id)} aria-label={`${state.favouriteIds.includes(entry.id) ? t("Remove bookmark for") : t("Bookmark")} ${entry.term}`} onClick={() => bookmark(entry.id)}>{state.favouriteIds.includes(entry.id) ? "★" : "☆"}</button></div><h3>{entry.term}</h3><p className="word-meta">{entry.partOfSpeech} · {entry.pronunciation}</p><WordGuidance word={entry} roleId={profile.roleId} />{!complete && <button className="secondary-button" disabled={plan.completedIds.includes(entry.id)} onClick={() => { if (move(index)) setActive(true); }}>{plan.completedIds.includes(entry.id) ? t("Practised today") : t("Practise this word")}</button>}</article>)}</div> : <div className="empty-state"><h3>{t("You’ve started every word in this course.")}</h3><p>{t("Keep the words available through Review, or explore another professional role in Settings.")}</p><button className="primary-button" onClick={() => navigate("practice")}>{t("Open Review")}</button></div>}</section>
+  </>;
+}
 
-  const toggleGoal = (id: GoalId) => {
-    setGoalIds((current) => current.includes(id) ? current.filter((item) => item !== id) : current.length < 3 ? [...current, id] : current);
+function Courses({ state, day, profile, commit, scopeKey, navigate, expose }: { state: State; day: string; profile: Profile; commit: Commit; scopeKey: string; navigate: (view: View) => void; expose: (ids: readonly string[]) => boolean }) {
+  const path = professionalLearningPaths.find((item) => item.roleId === profile.roleId); const [checking, setChecking] = useState(false); const [selected, setSelected] = useState<number | null>(null); const [message, setMessage] = useState("");
+  if (!path) return <div className="empty-state"><h1>Your course is being prepared</h1></div>;
+  const questions = path.startingCheck ?? []; const signature = JSON.stringify(questions); const savedDraft = state.learningV3.startingCheckDrafts[profile.roleId];
+  const answers = savedDraft?.pathId === path.id && savedDraft.signature === signature ? savedDraft.answers : [];
+  const finished = questions.length === 6 && answers.length === 6; const score = answers.filter((answer, index) => answer === questions[index]?.correctIndex).length;
+  const foundation = answers[0] === questions[0]?.correctIndex && answers[1] === questions[1]?.correctIndex; const suggestion = foundation && score >= 4 ? score === 6 ? 4 : 2 : 0;
+  const placement = state.learningV3.placementsByRole[profile.roleId]; const allIds = [...new Set(path.modules.flatMap((module) => module.lessons.flatMap((lesson) => lesson.wordIds)))];
+  const guard = (updater: (current: State) => State) => { let allowed = false; const success = commit((current) => { if (current.profile?.roleId !== profile.roleId || dayAt(current.settings.timeZone) !== day) return current; allowed = true; return updater(current); }, scopeKey); return allowed && success; };
+  const saveAnswer = (choice: number) => {
+    if (answers.length >= questions.length) return;
+    if (guard((current) => {
+      const draft = current.learningV3.startingCheckDrafts[profile.roleId]; const currentAnswers = draft?.signature === signature && draft.pathId === path.id ? draft.answers : [];
+      if (currentAnswers.length !== answers.length) return current;
+      return { ...current, learningV3: { ...current.learningV3, startingCheckDrafts: { ...current.learningV3.startingCheckDrafts, [profile.roleId]: { pathId: path.id, signature, answers: [...currentAnswers, choice], updatedAt: stamp() } } } };
+    })) { setSelected(null); setMessage(""); } else setMessage("Your answer could not be saved. Please retry.");
   };
-
-  const canContinue =
-    (step === 0 && Boolean(roleId)) ||
-    (step === 1 && Boolean(seniorityId)) ||
-    (step === 2 && situationIds.length > 0) ||
-    (step === 3 && goalIds.length > 0);
-
-  const finish = () => {
-    if (!roleId || !seniorityId || !situationIds.length || !goalIds.length) return;
-    onComplete({ roleId, seniorityId, situationIds, goalIds });
+  const apply = (index: number) => {
+    const saved = guard((current) => {
+      const draft = current.learningV3.startingCheckDrafts[profile.roleId]; if (draft?.signature !== signature || draft.answers.length !== 6) return current;
+      const next = { ...current, learningV3: { ...current.learningV3, placementsByRole: { ...current.learningV3.placementsByRole, [profile.roleId]: { pathId: path.id, startingModuleId: path.modules[index].id, checkedAtISO: stamp(), correctCount: score, questionCount: 6 } }, updatedAt: stamp() } };
+      const key = `${day}:${profile.roleId}`; const plan = next.learningV3.rolePlans[key];
+      const untouched = plan && plan.completedIds.length === 0 && Object.keys(plan.answers).length === 0 && !plan.wordIds.some((id) => current.learningV3.practiceDrafts[id]?.trim());
+      return untouched ? { ...next, learningV3: { ...next.learningV3, rolePlans: { ...next.learningV3.rolePlans, [key]: makePlan(next, profile.roleId, day) } } } : next;
+    }); if (saved) { setChecking(false); setMessage("Starting point saved. Existing practice and review history stay with you."); } else setMessage("Your starting point could not be saved. Please retry.");
   };
-
-  const headings = [
-    ["Professional role", "Where do you use English most?"],
-    ["Seniority", "What kind of communication do you own?"],
-    ["Communication situations", "Choose the moments that matter every week."],
-    ["Learning goals", "How do you want your language to work harder?"],
-  ];
-
-  return (
-    <div className="onboarding-shell">
-      <header className="onboarding-header">
-        <div className="static-wordmark"><span className="wordmark-glyph">L</span><strong>Lucid</strong><small>Professional English for your role</small></div>
-        {onCancel && <button onClick={onCancel}>Cancel</button>}
-      </header>
-      <nav className="onboarding-progress" aria-label="Onboarding progress">
-        {headings.map(([label], index) => <span key={label} className={step === index ? "active" : step > index ? "done" : ""}>{index + 1}<small>{label}</small></span>)}
-      </nav>
-      <main className="onboarding-main">
-        <span className="eyebrow">YOUR PERSONAL LEARNING PATH · {step + 1} OF 4</span>
-        <h1>{headings[step][1]}</h1>
-        <p>Lucid will select three active words and realistic practice from your professional context.</p>
-
-        {step === 0 && <div className="choice-grid role-choice-grid">
-          {professionalRoles.map((item) => <button key={item.id} className={roleId === item.id ? "selected" : ""} onClick={() => chooseRole(item.id)}><span>{item.shortLabel.slice(0, 1)}</span><strong>{item.label}</strong><small>{item.description}</small></button>)}
-        </div>}
-
-        {step === 1 && <div className="choice-grid seniority-grid">
-          {seniorityLevels.map((item) => <button key={item.id} className={seniorityId === item.id ? "selected" : ""} onClick={() => setSeniorityId(item.id)}><strong>{item.label}</strong><small>{item.description}</small><em>{item.communicationFocus}</em></button>)}
-        </div>}
-
-        {step === 2 && <div className="choice-grid situation-grid">
-          {role?.situations.map((item) => <button key={item.id} className={situationIds.includes(item.id) ? "selected" : ""} onClick={() => toggleSituation(item.id)}><strong>{item.label}</strong><small>{item.description}</small><em>{situationIds.includes(item.id) ? "Selected ✓" : "Select situation"}</em></button>)}
-        </div>}
-
-        {step === 3 && <div className="choice-grid goals-grid">
-          {communicationGoals.map((item) => <button key={item.id} className={goalIds.includes(item.id) ? "selected" : ""} onClick={() => toggleGoal(item.id)}><strong>{item.label}</strong><small>{item.outcome}</small><em>{goalIds.includes(item.id) ? "Selected ✓" : "Select goal"}</em></button>)}
-        </div>}
-
-        <div className="onboarding-actions">
-          <button className="secondary-button" disabled={step === 0} onClick={() => setStep((current) => Math.max(0, current - 1))}>Back</button>
-          {step < 3
-            ? <button className="primary-button" disabled={!canContinue} onClick={() => setStep((current) => Math.min(3, current + 1))}>Continue <span aria-hidden="true">→</span></button>
-            : <button className="primary-button" disabled={!canContinue} onClick={finish}>Build my daily path <span aria-hidden="true">→</span></button>}
-        </div>
-      </main>
-    </div>
-  );
+  return <><div className="page-intro"><div><span className="eyebrow">YOUR PROFESSIONAL COURSE</span><h1>{path.title}</h1><p>{path.description}</p></div></div><div className="course-summary"><article><strong>{allIds.length}</strong><span>word and phrase entries</span></article><article><strong>{path.modules.length}</strong><span>chapters</span></article><article><strong>{path.modules.reduce((count, module) => count + module.lessons.length, 0)}</strong><span>lessons at your own pace</span></article><article><strong>{allIds.filter((id) => contextStarted(state, id, profile.roleId)).length}</strong><span>words started, not mastered</span></article></div>
+    <section className="starting-point"><div><span className="eyebrow">AN OPTIONAL SIX-QUESTION CHECK</span><h2>{placement ? `Your starting chapter: ${path.modules.find((item) => item.id === placement.startingModuleId)?.title}` : "Find a comfortable starting point"}</h2><p>This recognition check suggests where to begin. It does not measure mastery or award learning credit. Earlier chapters remain available and return later.</p></div><button className="secondary-button" onClick={() => setChecking(!checking)}>{checking ? "Pause check" : answers.length ? "Resume starting check" : "Find my starting point"}</button></section>
+    {message && <p role="status" className="save-notice">{message}</p>}
+    {checking && <section className="check-panel"><span className="eyebrow">STARTING CHECK · {Math.min(6, answers.length + 1)} OF 6</span>{savedDraft && savedDraft.signature !== signature && <p>The questions have changed. This check starts again; your existing learning stays.</p>}
+      {!finished && questions[answers.length] && <><h2>{questions[answers.length].prompt}</h2><div className="challenge-options">{questions[answers.length].options.map((option, index) => <button key={option} aria-pressed={selected === index} className={selected === index ? "selected" : ""} onClick={() => setSelected(index)}>{option}</button>)}</div><div className="button-row"><button className="secondary-button" onClick={() => saveAnswer(-1)}>Skip this question</button><button className="primary-button" disabled={selected === null} onClick={() => selected !== null && saveAnswer(selected)}>Save answer and continue</button></div></>}
+      {finished && <><h2>A starting point, not a label.</h2><p>{score} of 6 choices correct. Suggested chapter: <strong>{path.modules[suggestion].title}</strong>.</p><p>Untouched daily cards can update now. If you have already practised or written a draft, the choice applies to your next new daily plan.</p><div className="button-row"><button className="primary-button" onClick={() => apply(suggestion)}>Use suggested starting point</button><button className="secondary-button" onClick={() => apply(0)}>Start from chapter one</button></div><details><summary>Review my answers</summary>{questions.map((question, index) => <article key={question.id}><h3>{index + 1}. {question.prompt}</h3><p>Your choice: {answers[index] === -1 ? "Skipped" : question.options[answers[index]]}</p><p>{question.explanation}</p></article>)}</details><button className="text-button" onClick={() => { if (guard((current) => ({ ...current, learningV3: { ...current.learningV3, startingCheckDrafts: { ...current.learningV3.startingCheckDrafts, [profile.roleId]: { pathId: path.id, signature, answers: [], updatedAt: stamp() } } } }))) setSelected(null); }}>Restart check</button></>}
+    </section>}
+    <section className="course-chapters">{path.modules.map((module, index) => <details key={module.id} className="course-chapter"><summary><span className="chapter-number">{String(index + 1).padStart(2, "0")}</span><span><strong>{module.title}</strong><small>{module.outcome}</small></span><span className="chapter-status">{module.lessons.flatMap((lesson) => lesson.wordIds).filter((id) => contextStarted(state, id, profile.roleId)).length} / {module.lessons.flatMap((lesson) => lesson.wordIds).length} started</span></summary><div className="course-lessons">{module.lessons.map((lesson) => <details key={lesson.id} onToggle={(event) => { if (event.currentTarget.open) expose(lesson.wordIds.map((id) => contextEvidenceKey(id, profile.roleId))); }}><summary>{lesson.title}</summary><p>{lesson.objective}</p><div className="word-tags">{lesson.wordIds.map((id) => <span key={id}>{contextualWord(id, profile.roleId)?.term}</span>)}</div><h3>Workplace scenario</h3><p>{lesson.challenge}</p><details><summary>See a model response</summary><blockquote>{lesson.exampleResponse}</blockquote></details><button className="secondary-button" onClick={() => navigate("today")}>Go to today’s practice</button></details>)}</div></details>)}</section><p className="muted">Use fictional details in practice. These courses teach communication. Follow qualified advice and approved workplace procedures for real decisions.</p></>;
 }
 
-function TodayView({
-  greeting,
-  role,
-  situation,
-  goalPrompt,
-  activeWords,
-  dueCount,
-  completed,
-  attempts,
-  drafts,
-  listeningWordId,
-  setDrafts,
-  speak,
-  checkUsage,
-  startSpokenPractice,
-  completeToday,
-  navigate,
-  displayDate,
-}: {
-  date: string;
-  greeting: string;
-  role: (typeof professionalRoles)[number];
-  situation: (typeof professionalRoles)[number]["situations"][number];
-  goalPrompt?: string;
-  activeWords: ProfessionalWord[];
-  dueCount: number;
-  completed: boolean;
-  attempts: Record<string, UsageAttempt>;
-  drafts: Record<string, string>;
-  listeningWordId: string | null;
-  setDrafts: React.Dispatch<React.SetStateAction<Record<string, string>>>;
-  speak: (word: ProfessionalWord) => void;
-  checkUsage: (word: ProfessionalWord, source: "written" | "spoken", transcript?: string) => void;
-  startSpokenPractice: (word: ProfessionalWord) => void;
-  completeToday: () => void;
-  navigate: (view: View) => void;
-  displayDate: string;
-}) {
-  const hasProductivePractice = activeWords.some((word) => Boolean(attempts[word.id]));
-  return (
-    <>
-      <div className="page-intro coach-intro">
-        <div><span className="eyebrow">{displayDate.toUpperCase()}</span><h1>{greeting}</h1><p>Three words selected for your role. Learn them deeply, practise them in context, then use one at work.</p></div>
-        <div className="lesson-progress" aria-label={(completed ? 3 : 0) + " of 3 active words completed"}><span>{completed ? "Daily mission completed" : "0 / 3 active words"}</span><i><b style={{ width: completed ? "100%" : "8%" }} /></i></div>
-      </div>
-
-      <section className="coach-hero">
-        <div className="scenario-copy">
-          <span className="hero-kicker"><b>YOUR WORKPLACE SCENARIO</b><i />{role.shortLabel}</span>
-          <h2>{situation.label}</h2>
-          <p>{situation.description}</p>
-          <blockquote>{goalPrompt ?? "What does your listener need to understand or do next?"}</blockquote>
-          <div className="scenario-meta"><span><strong>3</strong> active words</span><span><strong>{dueCount}</strong> due review</span><span><strong>10</strong> focused minutes</span></div>
-        </div>
-        <div className="mission-card">
-          <small>TODAY&apos;S OUTCOME</small>
-          <strong>Use one precise word in a real professional moment.</strong>
-          <p>Meeting, email, presentation, feedback, or decision note—it only counts when the language becomes yours.</p>
-          {dueCount > 0 && <button onClick={() => navigate("practice")}>Review due words first →</button>}
-        </div>
-      </section>
-
-      {completed && <div className="completion-banner" role="status"><span>✓</span><div><strong>Today&apos;s loop is complete.</strong><p>Your three words will return on the 1 / 3 / 7 / 14 / 30-day review ladder.</p></div></div>}
-
-      <section className="active-word-section">
-        <div className="section-heading"><div><span className="eyebrow">THREE ACTIVE WORDS</span><h2>Learn less. Use more.</h2></div><p>Chosen by role, situation, goal, usefulness, and difficulty.</p></div>
-        <div className="professional-word-grid">
-          {activeWords.map((word, index) => (
-            <article className="professional-word-card" key={word.id}>
-              <div className="professional-word-top"><span>{String(index + 1).padStart(2, "0")} · {word.learningMode} vocabulary</span><b>{word.difficulty.replace("-", " ")}</b></div>
-              <div className="professional-word-title"><span className="role-emblem">{role.shortLabel.slice(0, 1)}</span><div><h3>{word.term}</h3><button onClick={() => speak(word)}>▶ {word.pronunciation}</button><small>{word.partOfSpeech}</small></div></div>
-              <p className="word-meaning">{word.meaning}</p>
-              <div className="usage-guidance"><div><small>WHEN TO USE</small><p>{word.whenToUse}</p></div><div className="avoid-guidance"><small>AVOID THIS</small><p>{word.avoidOrMisuse}</p></div></div>
-              <div className="collocation-list"><small>COLLOCATIONS</small>{word.collocations.map((item) => <span key={item}>{item}</span>)}</div>
-              <blockquote>{word.example}</blockquote>
-              <div className="word-mission"><small>WORKPLACE MISSION</small><p>{word.mission}</p></div>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="practice-lab">
-        <div className="practice-lab-header"><span className="eyebrow">PUT THE WORDS TO WORK</span><h2>Written practice and spoken practice</h2><p>Write or say a real sentence from your job. Lucid checks transparent surface signals and shows exactly what it can—and cannot—judge.</p></div>
-        <div className="practice-prompt-grid">
-          {activeWords.map((word) => {
-            const attempt = attempts[word.id];
-            return <article key={word.id}>
-              <div><strong>{word.term}</strong><small>{word.mission}</small></div>
-              <label htmlFor={"practice-" + word.id}>Your professional sentence</label>
-              <textarea id={"practice-" + word.id} value={drafts[word.id] ?? attempt?.sentence ?? ""} onChange={(event) => setDrafts((current) => ({ ...current, [word.id]: event.target.value }))} rows={4} placeholder={"Use “" + word.term + "” in a meeting, email, or decision."} />
-              <div className="practice-actions">
-                <button onClick={() => startSpokenPractice(word)}>{listeningWordId === word.id ? "Listening…" : "● Spoken practice"}</button>
-                <button className="primary-button" onClick={() => checkUsage(word, "written")}>Check my usage</button>
-              </div>
-              {attempt && <div className="usage-feedback" role="status">
-                <div className="feedback-score"><strong>{attempt.feedback.overallScore}</strong><span>/100</span></div>
-                <div><b>{feedbackLabel(attempt.feedback.overallScore)}</b><p>{attempt.feedback.suggestions[0] ?? "The configured checks found no immediate surface issue."}</p><small>{attempt.feedback.limitation}</small></div>
-              </div>}
-            </article>;
-          })}
-        </div>
-      </section>
-
-      <section className="complete-daily-mission">
-        <div><span className="eyebrow">CLOSE THE LOOP</span><h2>{completed ? "You showed up and used the language." : "Make today count."}</h2><p>{completed ? "Come back tomorrow for a fresh professional scenario and your due review." : "Complete today after you have practised the words. They will enter your adaptive review schedule."}</p></div>
-        <button className="primary-button" disabled={completed || activeWords.length < 3 || !hasProductivePractice} onClick={completeToday}>{completed ? "Completed ✓" : hasProductivePractice ? "Complete daily mission" : "Practise one word first"} </button>
-      </section>
-    </>
-  );
+export function Review({ state, day, profile, commit, scopeKey, blocked = false }: { state: State; day: string; profile: Profile; commit: Commit; scopeKey: string; blocked?: boolean }) {
+  const { t } = useLearningLanguage();
+  const [otherRoles, setOtherRoles] = useState(false);
+  const [attestations, setAttestations] = useState<Record<string, { meaning: boolean; natural: boolean }>>({});
+  const [notice, setNotice] = useState(""); const [textDrafts, setTextDrafts] = useState<Record<string, string>>({});
+  const words = reviewQueue(state, day, profile.roleId, otherRoles);
+  const saveDraft = (contextId: string, update: Partial<{ sentence: string; hinted: boolean; revealed: boolean }>) => {
+    let accepted = false;
+    const saved = commit((current) => {
+      if (current.profile?.roleId !== profile.roleId || dayAt(current.settings.timeZone) !== day) return current;
+      const key = `${day}:${contextId}`;
+      const prior = current.learningV3.reviewDrafts[key] ?? { sentence: "", hinted: false, revealed: false };
+      if (update.revealed) {
+        const split = contextId.lastIndexOf("::"); const wordId = contextId.slice(0, split); const contextRole = contextId.slice(split + 2) as RoleId;
+        const next = captureReviewResponse(current, { roleId: profile.roleId, contextRole, date: day, currentDay: dayAt(current.settings.timeZone), wordId, response: textDrafts[contextId] ?? prior.sentence ?? prior.response ?? "" });
+        accepted = next !== current; return next;
+      }
+      if (prior.revealed || prior.originalResponse !== undefined || prior.originalIndependent !== undefined) return current;
+      accepted = true;
+      const exposed = update.hinted ? recordContextExposure(current, [contextId], day) : current;
+      return { ...exposed, learningV3: { ...exposed.learningV3, reviewDrafts: { ...current.learningV3.reviewDrafts, [key]: { ...prior, ...update, hinted: prior.hinted || update.hinted === true, revealed: prior.revealed } } } };
+    }, scopeKey);
+    if (!saved || !accepted) setNotice("Your change could not be saved. Retry before continuing."); else setNotice("");
+    return saved && accepted;
+  };
+  const record = (word: ProfessionalWord, contextRole: RoleId, quality: ReviewQuality) => {
+    const contextId = contextEvidenceKey(word.id, contextRole); const key = `${day}:${contextId}`; let accepted = false;
+    const saved = commit((current) => {
+      if (current.profile?.roleId !== profile.roleId || dayAt(current.settings.timeZone) !== day) return current;
+      const draft = current.learningV3.reviewDrafts[key] ?? { sentence: "", hinted: false, revealed: false };
+      const attestation = attestations[contextId];
+      const next = applyContextReview(current, { roleId: profile.roleId, contextRole, date: day, currentDay: dayAt(current.settings.timeZone), wordId: word.id, response: textDrafts[contextId] ?? draft.sentence ?? draft.response ?? "", quality, hinted: draft.hinted, revealed: draft.revealed, meaningAttested: attestation?.meaning, naturalnessAttested: attestation?.natural });
+      accepted = next !== current; return next;
+    }, scopeKey);
+    setNotice(saved && accepted ? "Review saved. This records your self-assessment; it is not an automatic judgement of meaning or naturalness." : "This review could not be saved. Check your fresh answer and assessment, then retry.");
+  };
+  return <><div className="page-intro"><div><span className="eyebrow">{t("SPACED REVIEW")}</span><h1>{t("Retrieve before you recognise.")}</h1><p>{t("Recall the expression and write a fresh sentence before revealing guidance. Self-assessment keeps recognition, unaided recall and production separate.")}</p></div><div className="due-badge"><strong>{words.length}</strong><span>{t("words due")}</span></div></div><DailyIdiomReviewSection state={state} day={day} profile={profile} commit={commit} scopeKey={scopeKey} blocked={blocked} /><div className="srs-ladder" aria-label={t("Spaced review schedule")}>{SRS_INTERVAL_DAYS.map((days) => <span key={days}><b>{days}</b><small>{t(days === 1 ? "day" : "days")}</small></span>)}</div><label className="checkbox-line"><input type="checkbox" checked={otherRoles} onChange={(event) => setOtherRoles(event.target.checked)} /> {t("Include due contexts from other roles")}</label>{notice && <p className="save-notice" role="status">{t(notice)}</p>}
+    {words.length ? <div className="due-review-list">{words.map(({ word, roleId: contextRole, context }, index) => {
+      const contextId = contextEvidenceKey(word.id, contextRole); const key = `${day}:${contextId}`;
+      const draft = state.learningV3.reviewDrafts[key] ?? { sentence: "", hinted: false, revealed: false }; const sentence = draft.revealed ? draft.originalResponse ?? draft.sentence ?? draft.response ?? "" : textDrafts[contextId] ?? draft.sentence ?? draft.response ?? "";
+      const frozenIndependent = isFrozenReviewIndependent(state, word.id, contextRole, day);
+      const assisted = !frozenIndependent && (draft.hinted || draft.revealed || state.learningV3.exposedOn[contextId] === day);
+      const attestation = attestations[contextId] ?? { meaning: false, natural: false };
+      const canRateGood = frozenIndependent && attestation.meaning && attestation.natural;
+      return <article key={key} className="review-card"><span className="eyebrow">{t("RECALL {index}", { index: index + 1 })} · {t(professionalRoles.find((role) => role.id === contextRole)?.shortLabel ?? "")} · {word.learningMode === "recognition" ? t("RECOGNITION VOCABULARY") : t("ANSWER HIDDEN")}</span>{!context && <p className="muted">{t("Earlier word history is preserved. This is your first assessment of this role’s context.")}</p>}<h2 lang="en">{hideTerm(word.meaning, word.term)}</h2><p lang="en">{hideTerm(word.mission, word.term)}</p><label htmlFor={`review-${contextId}`}>{draft.revealed ? t("Your committed original response") : t("Your fresh workplace sentence")}</label><textarea id={`review-${contextId}`} autoComplete="off" rows={4} readOnly={draft.revealed} value={sentence} onChange={(event) => { setTextDrafts((current) => ({ ...current, [contextId]: event.target.value })); saveDraft(contextId, { sentence: event.target.value }); setAttestations((current) => ({ ...current, [contextId]: { meaning: false, natural: false } })); }} placeholder={t("Recall the expression and use it in a new situation.")} />
+        <div className="button-row"><button className="secondary-button" disabled={draft.revealed} onClick={() => saveDraft(contextId, { hinted: true })}>{t("Use a hint")}</button><button className="secondary-button" disabled={draft.revealed} onClick={() => saveDraft(contextId, { revealed: true })}>{t("Commit response and reveal guidance")}</button></div>
+        {draft.hinted && !draft.revealed && <div className="help-panel"><p>{t("The expression starts with {letter} and has {count} words.", { letter: word.term[0], count: word.term.split(/\s+/).length })}</p></div>}
+        {draft.revealed && <div className="help-panel"><h3>{word.term}</h3><WordGuidance word={word} roleId={contextRole} /></div>}
+        {frozenIndependent ? <fieldset className="self-assessment"><legend>{t("Your self-assessment")}</legend><label className="checkbox-line"><input type="checkbox" checked={attestation.meaning} onChange={(event) => setAttestations((current) => ({ ...current, [contextId]: { ...attestation, meaning: event.target.checked } }))} /> {t("My sentence uses the intended meaning correctly.")}</label><label className="checkbox-line"><input type="checkbox" checked={attestation.natural} onChange={(event) => setAttestations((current) => ({ ...current, [contextId]: { ...attestation, natural: event.target.checked } }))} /> {t("It sounds natural and appropriate for this audience.")}</label><p className="muted">{t("Your original response was saved before support appeared. These confirmations capture your judgement; they do not prove correctness.")}</p></fieldset> : assisted || word.learningMode === "recognition" ? <p className="assisted-label">{t("This is supported practice. Save Again or Hard to review it sooner; this attempt cannot earn independent recall credit.")}</p> : <p className="muted">{t("Commit your response and reveal guidance before assessing it. Lucid saves the original response and keeps it unchanged while you compare.")}</p>}
+        <div className="quality-actions"><span>{t("How well could you retrieve it?")}</span>{([{ quality: 0, label: t("Again"), note: t("Could not recall") }, { quality: 1, label: t("Hard"), note: t("Partial or uncertain") }, { quality: 2, label: t("Good"), note: t("Confident recall") }, { quality: 3, label: t("Easy"), note: t("Comfortable recall") }] as const).map((item) => <button key={item.quality} disabled={item.quality >= 2 && !canRateGood} onClick={() => record(word, contextRole, item.quality)}><b>{item.label}</b><small>{item.note}</small></button>)}</div>
+      </article>;
+    })}</div> : <div className="empty-state"><h2>{t("You’re caught up for this role.")}</h2><p>{t("Return when a review is due. Lasting recall requires three confident independent retrieval dates, including one at least 30 days after first practice in this context.")}</p></div>}
+  </>;
 }
 
-function PracticeView({
-  dueReviews,
-  masteryByWordId,
-  recordReview,
-  speak,
-}: {
-  dueReviews: readonly { word: LearningWord; mastery: WordMastery; overdueDays: number }[];
-  masteryByWordId: Record<string, WordMastery>;
-  recordReview: (wordId: string, quality: ReviewQuality) => void;
-  speak: (word: ProfessionalWord) => void;
-}) {
-  return (
-    <>
-      <div className="page-intro"><div><span className="eyebrow">ADAPTIVE PRACTICE</span><h1>Retrieve before you recognise.</h1><p>Words return after 1, 3, 7, 14, and 30 days. A word is mastered only after successful productive use on three separate dates and retention after day 30.</p></div><div className="due-badge"><strong>{dueReviews.length}</strong><span>due now</span></div></div>
-      <div className="srs-ladder" aria-label="Spaced review schedule">{SRS_INTERVAL_DAYS.map((days, index) => <span key={days}><b>{days}</b><small>{days === 1 ? "day" : "days"}</small>{index < SRS_INTERVAL_DAYS.length - 1 && <i>→</i>}</span>)}</div>
-      {dueReviews.length ? <div className="due-review-list">
-        {dueReviews.map(({ word, mastery, overdueDays }) => <article key={word.id}>
-          <div className="review-word-copy"><small>{overdueDays > 0 ? overdueDays + " days overdue" : "Due today"}</small><h2>{word.source.term}</h2><button onClick={() => speak(word.source)}>▶ {word.source.pronunciation}</button><p>Recall the meaning and say a natural workplace sentence before revealing the guidance.</p><details><summary>Reveal guidance</summary><p>{word.source.meaning}</p><blockquote>{word.source.example}</blockquote></details></div>
-          <div className="quality-actions"><span>How well did you produce it?</span><button onClick={() => recordReview(word.id, 0)}><b>Again</b><small>1 day</small></button><button onClick={() => recordReview(word.id, 1)}><b>Hard</b><small>step back</small></button><button onClick={() => recordReview(word.id, 2)}><b>Good</b><small>advance</small></button><button onClick={() => recordReview(word.id, 3)}><b>Easy</b><small>advance ×2</small></button><em>{mastery.reviewCount} previous reviews</em></div>
-        </article>)}
-      </div> : <div className="empty-state"><strong>You&apos;re caught up.</strong><p>Complete today&apos;s mission or return when the next scheduled review is due.</p></div>}
-      {Object.keys(masteryByWordId).length > 0 && <section className="mastery-evidence"><span className="eyebrow">YOUR ACTIVE VOCABULARY</span><div>{Object.values(masteryByWordId).slice(0, 12).map((mastery) => { const word = getWord(mastery.wordId); return word ? <span key={mastery.wordId}><b>{word.term}</b><small>Next: {mastery.nextReviewOn}</small><em>{isWordMastered(mastery) ? "Mastered" : "In practice"}</em></span> : null; })}</div></section>}
-    </>
-  );
+export function Library({ profile, state, bookmark, expose, day, blocked = false }: { profile: Profile; state: State; bookmark: (id: string) => boolean; expose: (ids: readonly string[]) => boolean; day: string; blocked?: boolean }) {
+  const { t } = useLearningLanguage();
+  const [listing, setListing] = useState<{ search: string; mode: "role" | "all" | "bookmarks" | "recognition"; page: number }>({ search: "", mode: "role", page: 1 });
+  const [archivePage, setArchivePage] = useState(1);
+  const { search, mode } = listing;
+  const filtered = professionalWords.filter(entry => mode === "all" || entry.roles.includes(profile.roleId)).map(entry => contextualWord(entry.id, entry.roles.includes(profile.roleId) ? profile.roleId : entry.roles[0])!).filter(entry => (mode !== "bookmarks" || state.favouriteIds.includes(entry.id)) && (mode !== "recognition" || entry.learningMode === "recognition") && [entry.term, entry.meaning, entry.collocations.join(" "), entry.whenToUse].join(" ").toLowerCase().includes(search.toLowerCase().trim()));
+  const page = dictionaryPage(filtered, { page: listing.page, headword: entry => entry.term, id: entry => entry.id });
+  const archive = dictionaryPage(allWords, { page: archivePage, headword: entry => entry.word, id: entry => entry.id });
+  const words = page.items;
+  useEffect(() => {
+    const ids = words.map(word => contextEvidenceKey(word.id, word.roles.includes(profile.roleId) ? profile.roleId : word.roles[0])).filter(id => state.learningV3.exposedOn[id] !== day);
+    if (ids.length) expose(ids);
+  }, [words, profile.roleId, state.learningV3.exposedOn, day, expose]);
+  return <>
+    <div className="page-intro"><div><span className="eyebrow">ROLE-BASED WORD LIBRARY</span><h1>Useful language, ready to revisit.</h1><p>Read your role’s examples, collocations and common mistakes. A bookmark saves an entry; it does not award learning credit.</p></div></div>
+    <div className="library-tools"><label htmlFor="library-search" className="sr-only">Search professional words</label><input id="library-search" disabled={blocked} value={search} onChange={event => setListing(current => ({ ...current, search: event.target.value, page: 1 }))} placeholder="Search words, meanings, or collocations…" /><div className="filter-tabs">{(["role", "all", "bookmarks", "recognition"] as const).map(item => <button key={item} disabled={blocked} aria-pressed={mode === item} className={mode === item ? "active" : ""} onClick={() => setListing(current => ({ ...current, mode: item, page: 1 }))}>{item === "role" ? "For my role" : item === "all" ? "All roles" : item === "bookmarks" ? "Bookmarks" : "Recognition"}</button>)}</div></div>
+    <DictionaryPagination page={page.page} totalPages={page.totalPages} totalCount={page.totalCount} label="Vocabulary pages" disabled={blocked} onPageChange={next => setListing(current => ({ ...current, page: next }))} />
+    {words.length ? <div className="library-grid">{words.map(word => <article key={word.id}><div className="card-top"><span>{word.learningMode} · {word.usefulness}</span><button className="bookmark-button" aria-pressed={state.favouriteIds.includes(word.id)} aria-label={`${state.favouriteIds.includes(word.id) ? "Remove bookmark for" : "Bookmark"} ${word.term}`} onClick={() => bookmark(word.id)}>{state.favouriteIds.includes(word.id) ? "★" : "☆"}</button></div><h2 lang="en">{word.term}</h2><p className="word-meta">{word.partOfSpeech} · {word.pronunciation}</p><WordGuidance word={word} /><span className="word-state">{state.learningV3.contextMastery[contextEvidenceKey(word.id, word.roles.includes(profile.roleId) ? profile.roleId : word.roles[0])]?.mastered ? "Recall retained in this context" : contextStarted(state, word.id, word.roles.includes(profile.roleId) ? profile.roleId : word.roles[0]) ? "In practice" : "Not started"}</span></article>)}</div> : <div className="empty-state"><h2>No matching entries</h2><p>Try a shorter search or a different collection.</p></div>}
+    <DictionaryPagination page={page.page} totalPages={page.totalPages} totalCount={page.totalCount} label="Vocabulary pages, bottom" disabled={blocked} onPageChange={next => setListing(current => ({ ...current, page: next }))} />
+    <details className="legacy-archive"><summary>Learning history · Original Days 1–5 collection · {allWords.length} words</summary><DictionaryPagination page={archive.page} totalPages={archive.totalPages} totalCount={archive.totalCount} label="Learning history pages" disabled={blocked} onPageChange={setArchivePage} /><div className="archive-words">{archive.items.map(word => <article key={word.id}><h3>{word.word}</h3><p>{word.meaning}</p><blockquote lang="en">{word.example}</blockquote></article>)}</div></details>
+    <p className="muted">{t("Your saved words and course pace stay unchanged.")}</p>
+  </>;
 }
 
-function LibraryView({ profile, speak }: { profile: LearnerProfileState; speak: (word: ProfessionalWord) => void }) {
-  const [search, setSearch] = useState("");
-  const [mode, setMode] = useState<"role" | "all" | "recognition">("role");
-  const words = professionalWords.filter((word) => {
-    const matchesMode = mode === "all" || (mode === "role" && word.roles.includes(profile.roleId)) || (mode === "recognition" && word.learningMode === "recognition");
-    const haystack = [word.term, word.meaning, word.collocations.join(" "), word.whenToUse].join(" ").toLowerCase();
-    return matchesMode && haystack.includes(search.toLowerCase());
-  });
-  return (
-    <>
-      <div className="page-intro"><div><span className="eyebrow">ROLE-BASED WORD LIBRARY</span><h1>Useful language, not obscure language.</h1><p>Every entry is tagged by professional role, daily situation, usefulness, difficulty, seniority, and communication goal.</p></div></div>
-      <div className="library-tools"><label><span className="sr-only">Search professional words</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search words, meanings, or collocations…" /></label><div>{(["role", "all", "recognition"] as const).map((item) => <button className={mode === item ? "active" : ""} onClick={() => setMode(item)} key={item}>{item === "role" ? "For my role" : item}</button>)}</div></div>
-      <div className="library-grid">{words.map((word) => <article key={word.id}><div><span>{word.learningMode}</span><b>{word.usefulness}</b></div><h2>{word.term}</h2><button onClick={() => speak(word)}>▶ {word.pronunciation}</button><p>{word.meaning}</p><small>WHEN TO USE</small><p>{word.whenToUse}</p><em>{word.collocations.slice(0, 2).join(" · ")}</em></article>)}</div>
-      <details className="legacy-archive"><summary>Learning history · Original Days 1–5 collection · {allWords.length} words</summary><div>{allWords.map((word) => <span key={word.id}><b>{word.word}</b><small>{word.meaning}</small></span>)}</div></details>
-    </>
-  );
+function Progress({ state, day, roleId, dueCount }: { state: State; day: string; roleId: RoleId; dueCount: number }) {
+  const contexts = Object.values(state.learningV3.contextMastery).filter((item) => item.roleId === roleId);
+  const evidence = state.learningV3.reviewEvidence.filter((item) => item.roleId === roleId);
+  const production = evidence.filter((item) => item.kind === "self-assessed-production" && item.independent && item.quality >= 2);
+  const recall = evidence.filter((item) => item.kind === "unaided-recall" && item.independent);
+  const recognition = new Set([...evidence.filter((item) => !item.independent).map((item) => `${item.date}:${item.senseId}`), ...Object.values(state.learningV3.rolePlans).filter((plan) => plan.roleId === roleId).flatMap((plan) => plan.completedIds.map((id) => `${plan.date}:${contextEvidenceKey(id, roleId)}`))]).size;
+  const learned = Object.keys(state.learningV3.contextIntroducedOn).filter((id) => id.endsWith(`::${roleId}`)).length;
+  return <><div className="page-intro"><div><span className="eyebrow">HISTORY & PROGRESS</span><h1>Watch familiarity become recall.</h1><p>Guided practice, unaided recall, self-assessed production and retained recall stay separate.</p></div></div><div className="progress-stats"><article><span>CONTEXTS STARTED</span><strong>{learned}</strong><small>in this role</small></article><article><span>INDEPENDENT PRODUCTIONS</span><strong>{production.length}</strong><small>self-assessed attempts</small></article><article><span>CURRENT STREAK</span><strong>{currentStreak(practiceDates(state).map((date) => ({ date })), day)}</strong><small>days with learning practice</small></article><article><span>RETAINED RECALL</span><strong>{contexts.filter((item) => item.mastered).length}</strong><small>{dueCount} due for review</small></article></div><div className="evidence-summary"><p><strong>{recognition}</strong> guided or recognition practices · <strong>{recall.length}</strong> unaided recall attempts · <strong>{effortPoints(state)}</strong> effort points.</p><p>Daily completion adds 20 points once across roles. Guided words earn 10, and reviews earn 5 or 15 for successful independent retrieval. Points measure practice effort.</p><p>Retained recall requires confident independent retrieval on three distinct dates, including one at least 30 days after first practice in this role’s context. A later assisted or uncertain result returns it to practice.</p><p className="muted">Earlier word history and schedules are preserved. Older self-ratings are historical records, not newly verified context mastery. Lucid does not automatically judge meaning or naturalness.</p></div><section className="history-timeline"><h2>Your daily practice history</h2>{state.dailySessions.length ? [...state.dailySessions].sort((a, b) => b.completedAt.localeCompare(a.completedAt)).map((session) => <article key={session.id}><time>{session.date}</time><div><small>{professionalRoles.find((item) => item.id === session.roleId)?.shortLabel}</small><h3>{session.wordIds.map((id) => contextualWord(id, session.roleId)?.term).filter(Boolean).join(" · ")}</h3></div><span>Complete ✓</span></article>) : <p>Your first completed daily practice will appear here.</p>}</section><section className="mastery-evidence"><h2>Your context review schedule</h2><div>{contexts.map((item) => <article key={item.senseId}><strong>{contextualWord(item.wordId, roleId)?.term}</strong><span>Next review: {item.nextReviewOn}</span><small>{item.mastered ? "Recall retained in this context" : "In practice"} · {item.reviewCount} review days</small></article>)}</div>{!contexts.length && <p>Start a guided word or review to build evidence for this role.</p>}</section></>;
 }
 
-function ProgressView({ state, dueCount }: { state: AppState; dueCount: number }) {
-  const mastery = Object.values(state.masteryByWordId);
-  const mastered = mastery.filter(isWordMastered).length;
-  const productive = Object.keys(state.usageAttempts).length;
-  return (
-    <>
-      <div className="page-intro"><div><span className="eyebrow">HISTORY & PROGRESS</span><h1>Measure language you can use.</h1><p>Lucid tracks productive practice, scheduled retention, and professional missions—not exposure alone.</p></div></div>
-      <div className="progress-stats"><article><span>ACTIVE WORDS</span><strong>{state.introducedWordIds.length}</strong><small>introduced through your role</small></article><article><span>PRODUCTIVE USES</span><strong>{productive}</strong><small>written or spoken</small></article><article><span>CURRENT STREAK</span><strong>{consecutiveStreak(state.dailySessions)}</strong><small>completed daily missions</small></article><article><span>MASTERED</span><strong>{mastered}</strong><small>{dueCount} due for review</small></article></div>
-      <section className="history-timeline"><div><span className="eyebrow">DAILY MISSION HISTORY</span><h2>What you practised</h2></div>{state.dailySessions.length ? [...state.dailySessions].reverse().map((session) => <article key={session.id}><time>{session.date}</time><div><small>{professionalRoles.find((role) => role.id === session.roleId)?.shortLabel}</small><h3>{professionalRoles.flatMap((role) => role.situations).find((item) => item.id === session.situationId)?.label}</h3><p>{session.wordIds.map((id) => getWord(id)?.term).filter(Boolean).join(" · ")}</p></div><span>Complete ✓</span></article>) : <p>Your first completed daily mission will appear here.</p>}</section>
-      <section className="retention-explainer"><span className="eyebrow">MASTERY STANDARD</span><h2>Recognition is not ownership.</h2><div><p><b>1.</b> Produce the word correctly on at least three distinct dates.</p><p><b>2.</b> Retain it in productive practice at least 30 days after introduction.</p><p><b>3.</b> Recover from later lapses before it returns to Mastered.</p></div></section>
-    </>
-  );
-}
-
-function SettingsView({
-  state,
-  roleLabel,
-  requestNotifications,
-  updateSettings,
-  editProfile,
-  markFeedbackSubmitted,
-}: {
-  state: AppState;
-  roleLabel: string;
-  requestNotifications: (enabled: boolean) => Promise<void>;
-  updateSettings: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
-  editProfile: () => void;
-  markFeedbackSubmitted: () => void;
-}) {
-  return (
-    <>
-      <div className="page-intro"><div><span className="eyebrow">SETTINGS & BETA</span><h1>Keep Lucid relevant to your work.</h1><p>Update your professional path, schedule your practice, and tell us what should improve before the wider launch.</p></div></div>
-      <div className="settings-sections">
-        <section><div><span>01</span><h2>Professional profile</h2><p>Your words and scenarios are selected from your role, seniority, communication situations, and learning goals.</p></div><div className="profile-summary"><strong>{roleLabel}</strong><span>{seniorityLevels.find((item) => item.id === state.profile?.seniorityId)?.label}</span><p>{state.profile?.situationIds.length} situations · {state.profile?.goalIds.length} goals</p><button onClick={editProfile}>Edit learning profile →</button></div></section>
-        <section>
-          <div><span>02</span><h2>Daily schedule</h2><p>Browser alerts work while Lucid is open. Your lesson remains available even when notifications are off.</p></div>
-          <div className="setting-fields">
-            <div className="field-group"><label htmlFor="lesson-time">Lesson time</label><input id="lesson-time" type="time" value={state.settings.lessonTime} onChange={(event) => updateSettings("lessonTime", event.target.value)} /></div>
-            <div className="field-group"><label htmlFor="time-zone">Time zone</label><select id="time-zone" value={state.settings.timeZone} onChange={(event) => updateSettings("timeZone", event.target.value)}><option value="Asia/Dubai">Asia/Dubai</option><option value="Asia/Kolkata">Asia/Kolkata</option><option value="Europe/London">Europe/London</option><option value="America/New_York">America/New_York</option></select></div>
-            <label className="toggle-field" htmlFor="notifications"><span><b>Lesson notifications</b><small>One reminder at your selected local time</small></span><input id="notifications" aria-label="Lesson notifications" type="checkbox" checked={state.settings.notificationsEnabled} onChange={(event) => requestNotifications(event.target.checked)} /></label>
-          </div>
-        </section>
-        <section>
-          <div><span>03</span><h2>Learning experience</h2><p>Adjust reading comfort and pronunciation playback.</p></div>
-          <div className="setting-fields">
-            <div className="field-group"><label htmlFor="audio-speed">Audio speed</label><select id="audio-speed" value={state.settings.audioRate} onChange={(event) => updateSettings("audioRate", Number(event.target.value))}><option value={0.7}>Slow · 0.7×</option><option value={0.9}>Natural · 0.9×</option><option value={1}>Standard · 1×</option></select></div>
-            <div className="field-group"><label htmlFor="text-size">Text size</label><select id="text-size" value={state.settings.textSize} onChange={(event) => updateSettings("textSize", event.target.value as Settings["textSize"])}><option value="normal">Normal</option><option value="large">Large</option></select></div>
-          </div>
-        </section>
-        <BetaFeedback roleId={state.profile?.roleId ?? "consulting-strategy"} submitted={Boolean(state.betaFeedbackSubmittedAt)} onSubmitted={markFeedbackSubmitted} />
-      </div>
-    </>
-  );
-}
-
-function BetaFeedback({ roleId, submitted, onSubmitted }: { roleId: RoleId; submitted: boolean; onSubmitted: () => void }) {
-  const [rating, setRating] = useState(0);
-  const [helpful, setHelpful] = useState("");
-  const [confusing, setConfusing] = useState("");
-  const [missing, setMissing] = useState("");
-  const [status, setStatus] = useState("");
-
-  const submit = async () => {
-    if (!rating || !helpful.trim()) {
-      setStatus("Choose a rating and tell us what helped.");
-      return;
-    }
-    setStatus("Sending…");
-    const deviceId = window.localStorage.getItem("lucid-device-id") ?? crypto.randomUUID();
-    window.localStorage.setItem("lucid-device-id", deviceId);
+function SettingsPanel({ state, commit, scopeKey, editProfile, needsRecovery, onRecover, onDraftChange }: { state: State; commit: Commit; scopeKey: string; editProfile: () => void; onDraftChange: (dirty: boolean) => void; needsRecovery: boolean; onRecover: (value: unknown, restoreProfile?: boolean) => Promise<boolean> }) {
+  const update = <K extends keyof Settings>(key: K, value: Settings[K]) => commit((current) => ({ ...current, settings: { ...current.settings, [key]: value }, learningV3: { ...current.learningV3, updatedAt: stamp() } }), scopeKey);
+  const [notificationMessage, setNotificationMessage] = useState(""); const [zoneDraft, setZoneDraft] = useState(state.settings.timeZone); const [zoneError, setZoneError] = useState("");
+  const [backupValue, setBackupValue] = useState<unknown>(null); const [backupName, setBackupName] = useState(""); const [backupMessage, setBackupMessage] = useState(""); const [restoreProfile, setRestoreProfile] = useState(false);
+  const [feedbackDraft, setFeedbackDraft] = useState(false);
+  useEffect(() => { onDraftChange(zoneDraft !== state.settings.timeZone || backupValue !== null || feedbackDraft); }, [zoneDraft, state.settings.timeZone, backupValue, feedbackDraft, onDraftChange]);
+  useEffect(() => () => onDraftChange(false), [onDraftChange]);
+  const notifications = async (enabled: boolean) => { if (typeof Notification === "undefined") { setNotificationMessage("This browser does not support notifications."); return; } const permission = enabled && Notification.permission === "default" ? await Notification.requestPermission() : Notification.permission; const allowed = enabled && permission === "granted"; update("notificationsEnabled", allowed); setNotificationMessage(enabled && !allowed ? "Notifications are blocked. You can still practise whenever you open Lucid." : ""); };
+  const saveZone = () => { try { new Intl.DateTimeFormat("en", { timeZone: zoneDraft }).format(); if (update("timeZone", zoneDraft)) setZoneError(""); } catch { setZoneError("Enter a valid time zone, such as Europe/London or Asia/Dubai."); } };
+  const downloadBackup = () => {
     try {
-      const response = await fetch("/api/feedback", {
-        method: "POST",
-        headers: { "content-type": "application/json", "x-lucid-device-id": deviceId },
-        body: JSON.stringify({ roleId, rating, helpful, confusing, missing }),
-      });
-      if (!response.ok) throw new Error("Unable to save feedback");
-      setStatus("Thank you. Your beta feedback has been saved.");
-      onSubmitted();
-    } catch {
-      setStatus("We could not send that yet. Your answers remain on this screen.");
-    }
+      const blob = new Blob([JSON.stringify(exportPortableBackup(state), null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `Lucid-learning-${dayAt(state.settings.timeZone)}.json`; link.click(); window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setBackupMessage("Backup prepared. Save it somewhere private; it includes your personal practice drafts.");
+    } catch { setBackupMessage("Could not prepare this backup. Your learning remains on this device."); }
   };
+  const readBackup = async (file?: File) => {
+    if (!file) return; setBackupValue(null); setBackupName("");
+    try { if (file.size > 2_000_000) throw new Error("This backup is too large. Choose a Lucid learning backup under 2 MB."); const value: unknown = JSON.parse(await file.text()); importPortableBackup(value, state, initialState, false); setBackupValue(value); setBackupName(file.name); setRestoreProfile(false); setBackupMessage("Backup checked. Review the options below, then choose Merge backup to import it."); }
+    catch (error) { setBackupMessage(error instanceof Error ? error.message : "This is not a compatible Lucid backup."); }
+  };
+  const mergeBackup = async () => {
+    if (!backupValue) return;
+    if (needsRecovery) { const restored = await onRecover(backupValue, restoreProfile); setBackupMessage(restored ? "Backup restored after preserving your earlier record." : "Could not restore this backup. Keep it safe and retry when your session and device storage are available."); if (restored) setBackupValue(null); return; }
+    try { let accepted = false; const saved = commit((current) => { accepted = true; return importPortableBackup(backupValue, current, initialState, restoreProfile); }, scopeKey); if (saved && accepted) { setBackupValue(null); setBackupName(""); setBackupMessage("Backup merged. Your existing history stays with you. Check your course and review schedule."); } else setBackupMessage("This backup could not be saved. It is still ready here; retry before leaving."); }
+    catch (error) { setBackupMessage(error instanceof Error ? error.message : "Could not merge the backup."); }
+  };
+  return <><LearningLanguageChoice /><LearningCoverageNote /><div className="page-intro"><div><span className="eyebrow">SETTINGS</span><h1>Keep practice comfortable.</h1><p>Set a manageable pace and a time that suits your day.</p></div></div><div className="settings-sections"><section><div><h2>Professional profile</h2><p>{professionalRoles.find((item) => item.id === state.profile?.roleId)?.label}</p><p>{seniorityLevels.find((item) => item.id === state.profile?.seniorityId)?.label}</p></div><button className="secondary-button" onClick={editProfile}>Edit learning profile</button></section><section><div><h2>Daily pace</h2><p>A pace change applies to your next new plan. Today’s saved cards stay stable.</p></div><div className="setting-fields"><label htmlFor="daily-count">New words per day</label><select id="daily-count" value={state.settings.dailyWordCount ?? 3} onChange={(event) => update("dailyWordCount", Number(event.target.value) as 1 | 2 | 3)}><option value={1}>1 word · a small step</option><option value={2}>2 words · steady practice</option><option value={3}>3 words · a focused session</option></select><label htmlFor="text-size">Text size</label><select id="text-size" value={state.settings.textSize} onChange={(event) => update("textSize", event.target.value as Settings["textSize"])}><option value="normal">Normal</option><option value="large">Large</option></select></div></section><section><div><h2>Daily schedule</h2><p>Browser alerts work while Lucid is open. Learning days follow your selected time zone.</p></div><div className="setting-fields"><label htmlFor="lesson-time">Lesson time</label><input id="lesson-time" type="time" value={state.settings.lessonTime} onChange={(event) => update("lessonTime", event.target.value)} /><label htmlFor="time-zone">Time zone</label><input id="time-zone" list="time-zone-options" value={zoneDraft} onChange={(event) => setZoneDraft(event.target.value)} /><datalist id="time-zone-options">{["Etc/UTC", "Asia/Dubai", "Asia/Kolkata", "Europe/London", "America/New_York", "America/Los_Angeles"].map((zone) => <option key={zone} value={zone} />)}</datalist><button className="secondary-button" onClick={saveZone}>Save time zone</button>{zoneError && <p role="alert">{zoneError}</p>}<label className="checkbox-line"><input type="checkbox" checked={state.settings.notificationsEnabled} onChange={(event) => void notifications(event.target.checked)} /> Lesson notifications</label>{notificationMessage && <p role="status">{notificationMessage}</p>}</div></section><section className="portable-backup"><div><h2>Learning backup</h2><p>Move a compatible learning backup between web and mobile by exporting and importing it yourself. When shared sign-in is enabled, the same verified learner account synchronizes saved progress with mobile. Backups also preserve private drafts and work created as a guest.</p><p>Private writing, original responses and retry text stay on this device. Safe lesson checkpoints, starting checks and practice history can sync through your verified account. A downloaded backup includes private drafts, so keep it private.</p></div><div className="setting-fields"><button className="secondary-button" onClick={downloadBackup}>Export learning backup</button><label htmlFor="backup-file">Choose a Lucid backup from web or mobile</label><input id="backup-file" type="file" accept=".json,application/json" onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; void readBackup(file); }} />{backupValue !== null && <div className="backup-preview"><strong>{backupName}</strong><p>Existing history and bookmarks will be merged. This explicit import also restores private writing and drafts that account sync leaves on their original device.</p><label className="checkbox-line"><input type="checkbox" checked={restoreProfile} onChange={(event) => setRestoreProfile(event.target.checked)} /> Also use this backup’s role, goals and preferences</label><div className="button-row"><button className="primary-button" onClick={() => void mergeBackup()}>{needsRecovery ? "Restore backup" : "Merge backup"}</button><button className="secondary-button" disabled={needsRecovery} onClick={() => { setBackupValue(null); setBackupMessage("Import cancelled. Your current progress is unchanged."); }}>Cancel import</button></div></div>}{backupMessage && <p className="backup-message" role="status">{backupMessage}</p>}</div></section><BetaFeedback onDraftChange={setFeedbackDraft} roleId={state.profile?.roleId ?? "consulting-strategy"} onSaved={() => commit((current) => ({ ...current, betaFeedbackSubmittedAt: stamp() }), scopeKey)} /></div></>;
+}
 
-  return (
-    <section className="beta-feedback"><div><span>04</span><h2>Beta feedback</h2><p>Designed for the first 10–20 professional testers. No email content or confidential work information is requested.</p></div><div className="feedback-form">
-      {submitted && <div className="feedback-thanks">Feedback already submitted—you can send another update after more practice.</div>}
-      <fieldset><legend>How useful was today&apos;s experience?</legend><div className="rating-row">{[1, 2, 3, 4, 5].map((value) => <button type="button" aria-pressed={rating === value} className={rating === value ? "active" : ""} onClick={() => setRating(value)} key={value}>{value}<small>{value === 1 ? "Low" : value === 5 ? "High" : ""}</small></button>)}</div></fieldset>
-      <label>What helped you most?<textarea rows={3} value={helpful} onChange={(event) => setHelpful(event.target.value)} placeholder="A specific card, scenario, or practice moment…" /></label>
-      <label>What felt confusing?<textarea rows={3} value={confusing} onChange={(event) => setConfusing(event.target.value)} /></label>
-      <label>What should Lucid add next?<textarea rows={3} value={missing} onChange={(event) => setMissing(event.target.value)} /></label>
-      <button className="primary-button" onClick={submit}>Send beta feedback</button><p className="form-status" role="status">{status}</p>
-    </div></section>
-  );
+function BetaFeedback({ roleId, onSaved, onDraftChange }: { roleId: RoleId; onSaved: () => boolean; onDraftChange: (dirty: boolean) => void }) {
+  const [rating, setRating] = useState(0); const [helpful, setHelpful] = useState(""); const [confusing, setConfusing] = useState(""); const [missing, setMissing] = useState(""); const [status, setStatus] = useState(""); const [busy, setBusy] = useState(false);
+  useEffect(() => { onDraftChange(busy || rating > 0 || Boolean(helpful || confusing || missing)); }, [busy, rating, helpful, confusing, missing, onDraftChange]);
+  useEffect(() => () => onDraftChange(false), [onDraftChange]);
+  const submit = async () => { if (!rating || !helpful.trim()) { setStatus("Choose a rating and tell us what helped."); return; } setBusy(true); setStatus("Sending…"); try { const deviceId = window.localStorage.getItem("lucid-device-id"); const response = await fetch("/api/feedback", { method: "POST", headers: { "content-type": "application/json", ...(deviceId ? { "x-lucid-device-id": deviceId } : {}) }, body: JSON.stringify({ roleId, rating, helpful, confusing, missing }) }); if (!response.ok) throw new Error(); if (onSaved()) { setRating(0); setHelpful(""); setConfusing(""); setMissing(""); } setStatus("Thank you. Your beta feedback has been saved."); } catch { setStatus("We could not send that yet. Your answers remain on this screen."); } finally { setBusy(false); } };
+  return <section className="beta-feedback"><div><h2>Beta feedback</h2><p>What helped you retrieve a word or use it in a real moment? Please leave out confidential work details.</p></div><div className="feedback-form"><fieldset><legend>How useful was today’s experience?</legend><div className="rating-row">{[1, 2, 3, 4, 5].map((value) => <button type="button" key={value} aria-pressed={rating === value} className={rating === value ? "active" : ""} onClick={() => setRating(value)}>{value}</button>)}</div></fieldset><label htmlFor="feedback-helpful">What helped you most?</label><textarea id="feedback-helpful" value={helpful} onChange={(event) => setHelpful(event.target.value)} rows={3} /><label htmlFor="feedback-confusing">What felt confusing?</label><textarea id="feedback-confusing" value={confusing} onChange={(event) => setConfusing(event.target.value)} rows={3} /><label htmlFor="feedback-missing">What should Lucid add next?</label><textarea id="feedback-missing" value={missing} onChange={(event) => setMissing(event.target.value)} rows={3} /><button className="primary-button" disabled={busy} onClick={() => void submit()}>Send beta feedback</button><p role="status">{status}</p></div></section>;
+}
+
+function RecoveryPanel({ onRestore }: { onRestore: (value: unknown, restoreProfile?: boolean) => Promise<boolean> }) {
+  const { t } = useLearningLanguage();
+  const [value, setValue] = useState<unknown>(null); const [name, setName] = useState(""); const [restoreProfile, setRestoreProfile] = useState(false); const [message, setMessage] = useState(""); const [busy, setBusy] = useState(false);
+  const choose = async (file?: File) => {
+    if (!file) return; setValue(null); setName("");
+    try { if (file.size > 2_000_000) throw new Error("Choose a Lucid backup under 2 MB."); const data: unknown = JSON.parse(await file.text()); setValue(data); setName(file.name); setMessage("Ready to check and restore this backup. Lucid will reconnect to confirm where this progress should be restored."); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "This backup could not be read."); }
+  };
+  const restore = async () => {
+    if (!value || busy) return; setBusy(true);
+    try { const restored = await onRestore(value, restoreProfile); setMessage(restored ? "Backup restored. You can continue your learning." : "Could not restore this backup. Keep it safe, reconnect or make storage available, then retry. Existing saved bytes have not been discarded."); if (restored) setValue(null); }
+    catch { setMessage("Could not restore this backup. Keep it safe and retry when learning storage is available."); }
+    finally { setBusy(false); }
+  };
+  return <details className="onboarding-backup"><summary>{t("Restore a learning backup")}</summary><p>{t("Choose a Lucid web or mobile backup. This manually imports progress into your current web session. A damaged local record is archived before replacement; if that archive cannot be saved, restoration stops.")}</p><label htmlFor="recovery-file">{t("Lucid backup")}<input id="recovery-file" type="file" accept=".json,application/json" disabled={busy} onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; void choose(file); }} /></label>{value !== null && <><p><strong>{name}</strong></p><label className="checkbox-line"><input type="checkbox" checked={restoreProfile} disabled={busy} onChange={(event) => setRestoreProfile(event.target.checked)} /> {t("Also restore this backup’s role, goals and preferences")}</label><button className="secondary-button" disabled={busy} onClick={() => void restore()}>{busy ? t("Checking and restoring…") : t("Check and restore backup")}</button></>}{message && <p role="status">{t(message)}</p>}</details>;
 }

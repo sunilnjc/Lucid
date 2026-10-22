@@ -108,18 +108,27 @@ struct LucidPathBehaviorTests {
         }
         var tests: [(String, () throws -> Void)] = []
 
-        tests.append(("older catalogs and learner records need no path migration", {
+        tests.append(("legacy global history survives without fabricating role path progress", {
             try pathRequire(oldCatalog.learningPaths == nil, "A catalog without learningPaths failed backward compatibility")
             var oldLearner = LearnerData()
             oldLearner.profile = profile
             oldLearner.introducedWordIds = [ids[0]]
             oldLearner.progressByWordId[ids[0]] = WordProgress(introducedOn: day(-2), nextReviewOn: day(1))
+            oldLearner.activities = [LearningActivity(id: UUID(), kind: .practice, wordId: ids[0],
+                date: day(-2), dayKey: day(-2).lucidDayKey, quality: 2, productive: true)]
             let decoded = try JSONDecoder().decode(LearnerData.self, from: JSONEncoder().encode(oldLearner))
             let (store, _, _) = try makeStore(catalog: catalog, now: baseline, initial: decoded)
             store.prepareToday()
-            try pathRequire(store.pathCompletedWordCount == 1, "Adding a path forgot already-practised vocabulary")
+            try pathRequire(store.pathCompletedWordCount == 0 && store.pathProgress == 0,
+                "Global legacy history fabricated current-role path progress")
+            try pathRequire((store.data.contextIntroducedOn ?? [:]).isEmpty && (store.data.contextEvidence ?? []).isEmpty,
+                "Path activation manufactured role-context evidence")
+            try pathRequire(store.data.introducedWordIds == oldLearner.introducedWordIds && store.data.activities == oldLearner.activities,
+                "Adding a path erased legacy introductions or activity history")
+            try pathRequire(store.totalXP == 10, "Adding a path changed legacy earned XP")
             try pathRequire(store.data.progressByWordId[ids[0]] == oldLearner.progressByWordId[ids[0]], "Adding a path rewrote review history")
-            try pathRequire(store.data.currentWordIds == Array(ids[1..<4]), "Migration restarted the path instead of skipping known words")
+            try pathRequire(store.data.currentWordIds == Array(ids.prefix(3)),
+                "Global legacy history incorrectly skipped a new role-context introduction")
         }))
 
         tests.append(("path identity, lesson lookup, and zero-progress next lesson are role specific", {
@@ -183,7 +192,12 @@ struct LucidPathBehaviorTests {
             try pathRequire(store.draft(for: ids[6]) == initial.practiceDrafts?[ids[6]], "Path activation discarded the current draft")
             clock.now = day(1); store.refreshDay()
             try pathRequire(store.data.currentWordIds == Array(ids.prefix(2)), "The next calendar day did not enter the remaining ordered path")
-            try pathRequire(store.pathCompletedWordCount == 1, "Legacy practice was not counted toward the path")
+            try pathRequire(store.pathCompletedWordCount == 0 && store.pathProgress == 0,
+                "Legacy same-day completion fabricated role-context path progress")
+            try pathRequire(store.data.introducedWordIds == initial.introducedWordIds && store.data.progressByWordId == initial.progressByWordId,
+                "Rollover altered legacy introductions or schedules")
+            try pathRequire((store.data.contextIntroducedOn ?? [:]).isEmpty && (store.data.contextEvidence ?? []).isEmpty,
+                "Rollover manufactured role-context evidence from old completion")
         }))
 
         tests.append(("path progress and the next unfinished lesson survive a relaunch", {
@@ -219,6 +233,8 @@ struct LucidPathBehaviorTests {
         tests.append(("exhausted paths stop new lessons while scheduled reviews remain usable", {
             var initial = LearnerData(); initial.profile = profile
             initial.introducedWordIds = ids
+            // This fixture is an exhausted current-role course, rather than unscoped legacy history.
+            initial.contextIntroducedOn = Dictionary(uniqueKeysWithValues: ids.map { ("\($0)::\(finance.id)", day(-7)) })
             for id in ids {
                 initial.progressByWordId[id] = WordProgress(introducedOn: day(-7), nextReviewOn: baseline)
             }

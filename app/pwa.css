@@ -1,0 +1,41 @@
+:root { --font-geist-sans: Arial; --font-geist-mono: monospace; }
+.pwa-install { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 0 0 24px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--white); }
+.pwa-install-copy { flex: 1 1 200px; display: flex; flex-direction: column; gap: 3px; }
+.pwa-install-copy strong { font-size: 15px; }
+.pwa-install-copy span, .pwa-install-notice { font-size: 13px; color: var(--muted); line-height: 1.6; }
+.pwa-install-button, .pwa-install-dismiss { min-height: 44px; padding: 10px 16px; border: 1px solid var(--teal); border-radius: 7px; background: var(--teal); color: white; font-size: 14px; font-weight: 650; touch-action: manipulation; }
+.pwa-install-dismiss { background: transparent; color: var(--teal); border-color: transparent; }
+.pwa-install-compact { padding: 9px 14px; }
+.pwa-install-compact .pwa-install-copy { flex-basis: 130px; }
+.pwa-install-notice { flex-basis: 100%; margin: 0; }
+.pwa-install-dialog { width: min(540px, calc(100% - 32px)); max-height: calc(100dvh - 40px - env(safe-area-inset-top) - env(safe-area-inset-bottom)); overflow: auto; border: 1px solid var(--line); border-radius: 14px; background: var(--paper); color: var(--ink); padding: 28px; line-height: 1.7; }
+.pwa-install-dialog::backdrop { background: rgba(6, 31, 34, .65); }
+.pwa-install-dialog h2 { margin: 0 0 18px; font-family: Georgia, serif; font-weight: 400; font-size: 30px; line-height: 1.25; }
+.pwa-install-dialog ol { padding-left: 22px; }
+.pwa-install-dialog li { padding-left: 6px; margin-bottom: 12px; }
+.pwa-install-dialog p { font-size: 14px; }
+.pwa-install-dialog .pwa-install-button { margin-top: 8px; }
+.app-shell { min-height: 100dvh; }
+.topbar { height: calc(76px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); padding-left: max(18px, env(safe-area-inset-left)); padding-right: max(18px, env(safe-area-inset-right)); }
+.web-learning .main-content { padding-top: calc(110px + env(safe-area-inset-top)); padding-left: max(32px, env(safe-area-inset-left)); padding-right: max(32px, env(safe-area-inset-right)); }
+.sidebar { top: calc(76px + env(safe-area-inset-top)); }
+.onboarding-main { padding-top: max(24px, env(safe-area-inset-top)); padding-bottom: max(24px, env(safe-area-inset-bottom)); }
+@media(max-width:820px) {
+  .web-learning .main-content { padding-top: calc(94px + env(safe-area-inset-top)); padding-left: max(18px, env(safe-area-inset-left)); padding-right: max(18px, env(safe-area-inset-right)); padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
+  .web-learning .mobile-nav { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+  .pwa-install { gap: 8px; padding: 14px; }
+  .pwa-install-copy { flex-basis: 100%; }
+  .pwa-install-compact .pwa-install-copy { flex-basis: 120px; }
+}
+@media(prefers-reduced-motion:reduce) { html { scroll-behavior: auto; } }
+
+
+/* Persistent app tools follow the fixed header and share the content column. */
+.lucid-root-learning .app-tools { margin-left: 222px; max-width: 1580px; padding: calc(96px + env(safe-area-inset-top)) max(32px, env(safe-area-inset-right)) 0 max(32px, env(safe-area-inset-left)); }
+.lucid-root-learning .app-tools > .pwa-install { margin-bottom: 0; }
+.lucid-root-learning .app-tools > .account-access { width: 100%; margin: 20px 0 0; padding-inline: 0; }
+.lucid-root-learning .web-learning .main-content { padding-top: 32px; }
+@media(max-width:820px) {
+  .lucid-root-learning .app-tools { margin-left: 0; padding: calc(94px + env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) 0 max(18px, env(safe-area-inset-left)); }
+  .lucid-root-learning .web-learning .main-content { padding-top: 24px; }
+}

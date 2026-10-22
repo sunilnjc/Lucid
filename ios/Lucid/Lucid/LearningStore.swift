@@ -52,6 +52,8 @@ final class LearningStore: ObservableObject {
     var syncAgain = false
     var accountGeneration = UUID()
     var dataRevision = 0
+    let suppliedExpressionContent: ExpressionContent?
+    let suppliedDailyIdiomCatalog: DailyIdiomCatalog?
     var clock: () -> Date
     static let intervals = [1, 3, 7, 14, 30]
 
@@ -75,10 +77,18 @@ final class LearningStore: ObservableObject {
         libraryNavigationReset = UUID()
     }
 
-    init(catalog suppliedCatalog: ProfessionalCatalog? = nil, persistence: LearningPersistence = LearningPersistence(), now: @escaping () -> Date = Date.init, accountService: AccountService? = AccountService.configured(), sessionStorage: AccountSessionStorage = .keychain) {
+    init(catalog suppliedCatalog: ProfessionalCatalog? = nil, expressionContent suppliedExpressionContent: ExpressionContent? = nil, idiomCatalog suppliedDailyIdiomCatalog: DailyIdiomCatalog? = nil, persistence: LearningPersistence = LearningPersistence(), now: @escaping () -> Date = Date.init, accountService: AccountService? = AccountService.configured(), sessionStorage: AccountSessionStorage = .keychain) {
+        self.suppliedExpressionContent = suppliedExpressionContent ?? ExpressionContent.bundled
+        self.suppliedDailyIdiomCatalog = suppliedDailyIdiomCatalog ?? DailyIdiomCatalog.bundled
         self.persistence = persistence
+        #if DEBUG && targetEnvironment(simulator)
+        let qaRuntime = SharedAccountQARuntime.configured()
+        self.accountService = accountService ?? qaRuntime?.service
+        self.sessionStorage = qaRuntime?.storage ?? sessionStorage
+        #else
         self.accountService = accountService
         self.sessionStorage = sessionStorage
+        #endif
         clock = now
         currentDate = now()
         if let suppliedCatalog {
@@ -94,7 +104,7 @@ final class LearningStore: ObservableObject {
         }
         var restoredSession: AccountSession?
         do {
-            if accountService != nil, let cached = try sessionStorage.load() {
+            if self.accountService != nil, let cached = try self.sessionStorage.load() {
                 if let receipt = try persistence.accountDeletionReceipt(for: cached.user.id) {
                     // Even if Keychain cleanup still fails, never bind this session to UI/data.
                     try? sessionStorage.clear()
@@ -120,6 +130,7 @@ final class LearningStore: ObservableObject {
         }
         if session != nil { syncStatus = "Saved on device · waiting to sync" }
         cloudRestorePending = session != nil && data.profile == nil
+        data = hydrateSharedLearning(data, at: currentDate)
     }
 
     var profile: LearnerProfile? { data.profile }
@@ -137,7 +148,7 @@ final class LearningStore: ObservableObject {
         learningPath?.lessons.first { $0.wordIds.contains(wordId) }
     }
     var pathCompletedWordCount: Int {
-        Set(learningPath?.wordIds ?? []).intersection(data.introducedWordIds).count
+        Set(learningPath?.wordIds ?? []).filter { contextHasIntroduction(wordId: $0, roleId: profile?.roleId ?? "") }.count
     }
     var pathProgress: Double {
         guard let path = learningPath, !path.wordIds.isEmpty else { return 0 }
@@ -146,7 +157,7 @@ final class LearningStore: ObservableObject {
     var nextPathLesson: ProfessionalPathLesson? {
         guard let path = learningPath else { return nil }
         return orderedModules(in: path, for: data).flatMap(\.lessons)
-            .first { lesson in lesson.wordIds.contains { !data.introducedWordIds.contains($0) } }
+            .first { lesson in lesson.wordIds.contains { !contextHasIntroduction(wordId: $0, roleId: path.roleId) } }
     }
 
     func orderedModules(in path: ProfessionalLearningPath, for learner: LearnerData) -> [ProfessionalPathModule] {
@@ -204,7 +215,7 @@ final class LearningStore: ObservableObject {
     /// Never replace written work, a completed word, or a day's earned milestone.
     var startingCheckCanReplaceToday: Bool {
         !isTodayComplete && !hasTapWorkToday(roleId: profile?.roleId ?? "") && data.currentWordIds.allSatisfy { id in
-            !data.completedWordIdsToday.contains(id) && draft(for: id).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            !isCurrentRoleWordComplete(id) && draft(for: id).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
     }
 
@@ -262,17 +273,26 @@ final class LearningStore: ObservableObject {
         // A streak measures showing up; difficult reviews still count as study.
         Set(activities.map(\.dayKey))
             .union(data.sessions.map(\.localDayKey))
+            .union(contextEvidence.map(\.date))
+            .union((data.rehearsalSessions ?? [:]).values.compactMap { $0.completedAt?.lucidDayKey })
+    }
+    func reviewSchedule(for wordId: String) -> WordProgress? {
+        if let role = profile?.roleId, let word = word(id: wordId), word.roles.contains(role),
+           let contextual = contextSchedule(wordId: wordId, roleId: role) { return contextual }
+        return data.progressByWordId[wordId]
     }
     var dueWords: [ProfessionalWord] {
         let today = currentDate.lucidStartOfDay
-        return data.progressByWordId.filter { $0.value.nextReviewOn.lucidStartOfDay <= today && !reviewedToday($0.key) }
-            .compactMap { word(id: $0.key) }.sorted {
-                let left = data.progressByWordId[$0.id]?.nextReviewOn ?? today
-                let right = data.progressByWordId[$1.id]?.nextReviewOn ?? today
-                return left == right ? $0.id < $1.id : left < right
-            }
+        return catalog.words.compactMap { entry -> ProfessionalWord? in
+            guard let schedule = reviewSchedule(for: entry.id), schedule.nextReviewOn.lucidStartOfDay <= today, !reviewedToday(entry.id) else { return nil }
+            return word(id: entry.id)
+        }.sorted {
+            let left = reviewSchedule(for: $0.id)?.nextReviewOn ?? today
+            let right = reviewSchedule(for: $1.id)?.nextReviewOn ?? today
+            return left == right ? $0.id < $1.id : left < right
+        }
     }
-    var nextReviewDate: Date? { data.progressByWordId.values.map(\.nextReviewOn).min() }
+    var nextReviewDate: Date? { catalog.words.compactMap { reviewSchedule(for: $0.id)?.nextReviewOn }.min() }
     var currentRoleDueWords: [ProfessionalWord] { dueWords.filter { $0.roles.contains(profile?.roleId ?? "") } }
     var otherRoleDueWords: [ProfessionalWord] { dueWords.filter { !$0.roles.contains(profile?.roleId ?? "") } }
     func reviewWords(includeOtherRoles: Bool) -> [ProfessionalWord] { includeOtherRoles ? dueWords : currentRoleDueWords }
@@ -290,17 +310,25 @@ final class LearningStore: ObservableObject {
     }
     var nextReviewDateForCurrentRole: Date? { nextScheduledReview(includeOtherRoles: false) }
     func nextScheduledReview(includeOtherRoles: Bool) -> Date? {
-        data.progressByWordId.compactMap { id, progress -> Date? in
-            guard let word = word(id: id), includeOtherRoles || word.roles.contains(profile?.roleId ?? ""),
-                  progress.nextReviewOn.lucidStartOfDay > currentDate.lucidStartOfDay else { return nil }
-            return progress.nextReviewOn
+        catalog.words.compactMap { word -> Date? in
+            guard includeOtherRoles || word.roles.contains(profile?.roleId ?? ""),
+                  let date = reviewSchedule(for: word.id)?.nextReviewOn,
+                  date.lucidStartOfDay > currentDate.lucidStartOfDay else { return nil }
+            return date
         }.min()
     }
     func reviewedToday(_ wordId: String) -> Bool {
-        data.progressByWordId[wordId]?.lastReviewedOn?.lucidDayKey == currentDate.lucidDayKey
+        if let role = profile?.roleId, contextHasIntroduction(wordId: wordId, roleId: role) {
+            return evidence(for: role, kind: .unaidedRecall).contains { $0.wordId == wordId && $0.date == currentDate.lucidDayKey }
+        }
+        return data.progressByWordId[wordId]?.lastReviewedOn?.lucidDayKey == currentDate.lucidDayKey
             || todayActivities.contains { $0.kind == .review && $0.wordId == wordId }
     }
     var learnedCount: Int { data.progressByWordId.count }
+    var historicalMasteredCount: Int {
+        let ids = Set((data.historicalMasteredWordIds ?? []) + data.progressByWordId.filter { $0.value.mastered }.map(\.key))
+        return ids.filter { id in word(id: id)?.roles.contains(profile?.roleId ?? "") == true }.count
+    }
     var masteredCount: Int { data.progressByWordId.values.filter(\.mastered).count }
     var streak: Int {
         let keys = practiceDayKeys
@@ -324,6 +352,13 @@ final class LearningStore: ObservableObject {
             // the harder answer's effort credit, independent of event ordering.
             awards[key] = min(awards[key] ?? points, points)
         }
+        // Context evidence is the shared review ledger. A weaker same-day result
+        // caps an older activity award even when it arrived from another client.
+        for event in contextEvidence where event.kind == .unaidedRecall {
+            let key = "\(event.date):review:\(event.wordId)"
+            let points = event.independent && event.quality >= 2 ? 15 : 5
+            awards[key] = min(awards[key] ?? points, points)
+        }
         return awards.values.reduce(0, +)
     }
     var achievements: [LearningAchievement] {
@@ -331,12 +366,12 @@ final class LearningStore: ObservableObject {
             LearningAchievement(id: "first", title: "First step", detail: "Complete a daily lesson", symbol: "sparkle", earned: !data.sessions.isEmpty),
             LearningAchievement(id: "return", title: "Showing up", detail: "Practise on three different days", symbol: "flame.fill", earned: practiceDayKeys.count >= 3),
             LearningAchievement(id: "voice", title: "Finding your words", detail: "Practise ten different words", symbol: "text.bubble.fill", earned: learnedCount >= 10),
-            LearningAchievement(id: "retain", title: "Built to last", detail: "Retain a word for at least 30 days", symbol: "seal.fill", earned: masteredCount > 0)
+            LearningAchievement(id: "retain", title: "Word retention history", detail: "A retention milestone in your saved word history", symbol: "seal.fill", earned: historicalMasteredCount > 0)
         ]
     }
     var lessonProgress: Double {
         guard !data.currentWordIds.isEmpty else { return 0 }
-        return Double(data.currentWordIds.filter(data.completedWordIdsToday.contains).count) / Double(data.currentWordIds.count)
+        return Double(data.currentWordIds.filter(isCurrentRoleWordComplete).count) / Double(data.currentWordIds.count)
     }
 
     @discardableResult
@@ -373,14 +408,14 @@ final class LearningStore: ObservableObject {
     /// One role/day owns one frozen plan. Safe for local edits, upgrades, backup and sync.
     /// Never uses the store's current profile to interpret an incoming account snapshot.
     func normalizedDailyPlan(_ input: LearnerData, at now: Date, replacingUnstartedRole: String? = nil) -> LearnerData {
+        let input = hydrateSharedLearning(input, at: now)
         guard let profile = input.profile, catalog.roles.contains(where: { $0.id == profile.roleId }) else { return input }
         let dayKey = now.lucidDayKey
         let sameDay = (input.lessonDayKey ?? input.currentLessonDate?.lucidDayKey) == dayKey
-        let introduced = Set(input.introducedWordIds)
-        let candidates = catalog.words.filter { $0.learningMode == "active" && $0.roles.contains(profile.roleId) && !introduced.contains($0.id) }
+        let candidates = catalog.words.filter { $0.learningMode == "active" && $0.roles.contains(profile.roleId) && !contextHasIntroduction(wordId: $0.id, roleId: profile.roleId, record: input) }
         func valid(_ ids: [String], for roleId: String) -> Bool {
             guard !ids.isEmpty || !catalog.words.contains(where: {
-                $0.learningMode == "active" && $0.roles.contains(roleId) && !introduced.contains($0.id)
+                $0.learningMode == "active" && $0.roles.contains(roleId) && !contextHasIntroduction(wordId: $0.id, roleId: roleId, record: input)
             }) else { return false }
             return ids.count <= 3 && Set(ids).count == ids.count && ids.allSatisfy { id in
                 guard let entry = word(id: id) else { return false }
@@ -393,7 +428,12 @@ final class LearningStore: ObservableObject {
         // A known current plan can be saved even when a newer profile came from sync.
         if sameDay, let owner = input.lessonRoleId,
            catalog.roles.contains(where: { $0.id == owner }), valid(input.currentWordIds, for: owner) {
-            plans[owner] = DailyRolePlan(dayKey: dayKey, wordIds: input.currentWordIds)
+            let previous = plans[owner]?.completedWordIds
+            let recoveredCompletion = input.currentWordIds.filter { id in
+                if input.contextEvidence == nil { return input.completedWordIdsToday.contains(id) }
+                return rolePracticeIsComplete(wordId: id, roleId: owner, record: input, dayKey: dayKey)
+            }
+            plans[owner] = DailyRolePlan(dayKey: dayKey, wordIds: input.currentWordIds, completedWordIds: previous ?? recoveredCompletion)
         }
         let replacing = replacingUnstartedRole == profile.roleId
         if replacing { plans.removeValue(forKey: profile.roleId) }
@@ -411,7 +451,7 @@ final class LearningStore: ObservableObject {
         } else if let path = learningPath(for: profile.roleId) {
             var seen = Set<String>()
             next.currentWordIds = orderedModules(in: path, for: input).flatMap(\.lessons).flatMap(\.wordIds)
-                .filter { !introduced.contains($0) && seen.insert($0).inserted }
+                .filter { !contextHasIntroduction(wordId: $0, roleId: profile.roleId, record: input) && seen.insert($0).inserted }
                 .prefix(min(3, max(1, input.dailyWordGoal ?? 3))).map { $0 }
         } else {
             next.currentWordIds = candidates.sorted {
@@ -419,7 +459,7 @@ final class LearningStore: ObservableObject {
                 return left == right ? $0.id < $1.id : left > right
             }.prefix(min(3, max(1, input.dailyWordGoal ?? 3))).map(\.id)
         }
-        plans[profile.roleId] = DailyRolePlan(dayKey: dayKey, wordIds: next.currentWordIds)
+        plans[profile.roleId] = DailyRolePlan(dayKey: dayKey, wordIds: next.currentWordIds, completedWordIds: plans[profile.roleId]?.completedWordIds ?? [])
         next.dailyRolePlans = plans
         let practised = (input.activities ?? []).filter { $0.dayKey == dayKey && $0.kind == .practice }.compactMap(\.wordId)
         let completed = input.sessions.filter { $0.localDayKey == dayKey }.flatMap(\.wordIds)
@@ -436,22 +476,34 @@ final class LearningStore: ObservableObject {
             }
             next.reviewAttempts = (next.reviewAttempts ?? [:]).filter { $0.key.hasPrefix("\(dayKey):") }
         }
+        next.sharedLearning = projectSharedLearning(next, at: now)
         return next
     }
 
     func reviewAttempt(for wordId: String) -> ReviewAttempt? {
-        data.reviewAttempts?["\(currentDate.lucidDayKey):\(wordId)"]
+        let day = currentDate.lucidDayKey
+        let role = profile?.roleId ?? ""
+        if let scoped = data.reviewAttempts?["\(day):\(role):\(wordId)"] { return scoped }
+        guard let saved = data.reviewAttempts?["\(day):\(wordId)"], saved.roleId == nil || saved.roleId == role else { return nil }
+        return saved
     }
 
     func revealReview(wordId: String, usingHint: Bool) {
-        guard !storageBlocked, currentDate.lucidDayKey == clock().lucidDayKey,
+        guard !storageBlocked, !hasUnsavedChanges, !accountBusy, currentDate.lucidDayKey == clock().lucidDayKey,
               let word = word(id: wordId), dueWords.contains(where: { $0.id == wordId }),
               reviewAttempt(for: wordId) == nil else { return }
         let key = "\(currentDate.lucidDayKey):\(wordId)"
-        let sentence = String((data.practiceDrafts?["recall:\(key)"] ?? "").prefix(2_000))
+        let role = profile?.roleId ?? ""
+        let legacy = data.reviewAttempts?[key]
+        let legacyDraft = legacy?.roleId == nil || legacy?.roleId == role ? data.practiceDrafts?["recall:\(key)"] : nil
+        let sentence = String((data.practiceDrafts?["recall:\(currentDate.lucidDayKey):\(role):\(wordId)"] ?? legacyDraft ?? "").prefix(2_000))
         var attempts = data.reviewAttempts ?? [:]
-        attempts[key] = ReviewAttempt(originalAttempt: sentence, independent: !usingHint && hasPracticeContext(sentence, for: word))
-        data.reviewAttempts = attempts
+        let attempt = ReviewAttempt(originalAttempt: sentence, independent: !usingHint && !contextWasExposed(wordId: wordId) && hasPracticeContext(sentence, for: word), roleId: role, senseId: "\(wordId)::\(role)", capturedAt: clock())
+        attempts["\(currentDate.lucidDayKey):\(role):\(wordId)"] = attempt
+        if legacy == nil || legacy?.roleId == nil || legacy?.roleId == role { attempts[key] = attempt }
+        var next = data; next.reviewAttempts = attempts
+        markContextExposure(wordId: wordId, in: &next, at: clock())
+        data = next
     }
 
     func draft(for wordId: String) -> String { data.practiceDrafts?[wordId] ?? "" }
@@ -490,31 +542,41 @@ final class LearningStore: ObservableObject {
 
     @discardableResult
     func markTodayWord(_ wordId: String, quality: ReviewQuality) -> Bool {
-        guard !storageBlocked, data.lessonDayKey == clock().lucidDayKey,
-              data.currentWordIds.contains(wordId), !data.completedWordIdsToday.contains(wordId),
+        guard !storageBlocked, !hasUnsavedChanges, !accountBusy, data.lessonDayKey == clock().lucidDayKey,
+              data.currentWordIds.contains(wordId), !isCurrentRoleWordComplete(wordId),
               let word = word(id: wordId), hasPracticeContext(draft(for: wordId), for: word) else { return false }
         let now = clock()
         var next = data
         if !next.introducedWordIds.contains(wordId) { next.introducedWordIds.append(wordId) }
         // Guided practice introduces a word, but is not independent retrieval/mastery.
         next.progressByWordId[wordId] = next.progressByWordId[wordId] ?? WordProgress(introducedOn: now, nextReviewOn: now.lucidAdding(days: 1))
-        next.completedWordIdsToday.append(wordId)
-        next.activities = activities + [LearningActivity(id: UUID(), kind: .practice, wordId: wordId, date: now, dayKey: now.lucidDayKey, quality: quality.rawValue, productive: false)]
+        if !next.completedWordIdsToday.contains(wordId) { next.completedWordIdsToday.append(wordId) }
+        markRolePracticeComplete(wordId: wordId, in: &next, at: now)
+        if !activities.contains(where: { $0.kind == .practice && $0.wordId == wordId && $0.dayKey == now.lucidDayKey }) {
+            next.activities = activities + [LearningActivity(id: UUID(), kind: .practice, wordId: wordId, date: now, dayKey: now.lucidDayKey, quality: quality.rawValue, productive: false)]
+        }
+        appendContextEvidence(to: &next, wordId: wordId, kind: .recognition, quality: quality.rawValue, independent: false, at: now)
+        markContextExposure(wordId: wordId, in: &next, at: now)
         data = next
         return !hasUnsavedChanges
     }
 
     @discardableResult
     func review(wordId: String, quality: ReviewQuality, productive: Bool) -> Bool {
-        guard !storageBlocked, let existing = data.progressByWordId[wordId], word(id: wordId) != nil else { return false }
+        guard !storageBlocked, !hasUnsavedChanges, !accountBusy, word(id: wordId) != nil,
+              let existing = data.progressByWordId[wordId] ?? contextSchedule(wordId: wordId, roleId: profile?.roleId ?? "") else { return false }
         let now = clock()
         guard currentDate.lucidDayKey == now.lucidDayKey,
-              existing.nextReviewOn.lucidStartOfDay <= now.lucidStartOfDay,
-              !reviewedToday(wordId),
-              !activities.contains(where: { $0.kind == .review && $0.wordId == wordId && $0.dayKey == now.lucidDayKey }) else { return false }
+              let schedule = reviewSchedule(for: wordId), schedule.nextReviewOn.lucidStartOfDay <= now.lucidStartOfDay,
+              !reviewedToday(wordId) else { return false }
         var progress = existing
-        let persistedAttempt = data.reviewAttempts?["\(now.lucidDayKey):\(wordId)"]
-        let successful = quality.rawValue >= 2 && productive && (persistedAttempt?.independent ?? true)
+        let persistedAttempt = reviewAttempt(for: wordId)
+        let contextMatches = persistedAttempt?.roleId == profile?.roleId && persistedAttempt?.senseId == "\(wordId)::\(profile?.roleId ?? "")"
+        let exposure = data.sharedLearning?.exposures["\(wordId)::\(profile?.roleId ?? "")"]
+        let exposureBeforeOriginal = exposure?.dayKey == now.lucidDayKey && exposure.flatMap { SharedLearningState.instant($0.firstSeenAt) }.map { $0 <= (persistedAttempt?.capturedAt ?? now) } == true
+        let originalIsFresh = persistedAttempt?.capturedAt.map { $0 <= now && $0.lucidDayKey == now.lucidDayKey } == true
+        let successful = quality.rawValue >= 2 && productive && contextMatches && persistedAttempt?.independent == true && originalIsFresh && !exposureBeforeOriginal
+            && persistedAttempt.map { attempt in word(id: wordId).map { hasPracticeContext(attempt.originalAttempt, for: $0) } == true } == true
         let effective = successful ? quality : (quality == .again ? .again : .hard)
         switch effective {
         case .again: progress.intervalIndex = 0; progress.lapses += 1
@@ -525,7 +587,7 @@ final class LearningStore: ObservableObject {
         if successful && !progress.successfulReviewDates.contains(where: { $0.lucidDayKey == now.lucidDayKey }) { progress.successfulReviewDates.append(now) }
         progress.reviewCount += 1
         progress.lastReviewedOn = now
-        progress.nextReviewOn = now.lucidAdding(days: Self.intervals[min(4, max(0, progress.intervalIndex))])
+        progress.nextReviewOn = now.lucidAdding(days: effective.rawValue <= 1 ? 1 : Self.intervals[min(4, max(0, progress.intervalIndex))])
         // Keep the same conservative per-day rule as cloud merge: one helped
         // answer on another device must not become an independent success later.
         let priorReviewDays = Dictionary(activities.filter { $0.kind == .review && $0.wordId == wordId }
@@ -535,18 +597,22 @@ final class LearningStore: ObservableObject {
         let retainedThirtyDays = (Calendar.current.dateComponents([.day], from: progress.introducedOn.lucidStartOfDay, to: now.lucidStartOfDay).day ?? 0) >= 30
         progress.mastered = successful && successDayKeys.count >= 3 && retainedThirtyDays
         var next = data
-        next.progressByWordId[wordId] = progress
-        next.activities = activities + [LearningActivity(id: UUID(), kind: .review, wordId: wordId, date: now, dayKey: now.lucidDayKey, quality: effective.rawValue, productive: successful)]
+        if !next.introducedWordIds.contains(wordId) { next.introducedWordIds.append(wordId) }
+        if !activities.contains(where: { $0.kind == .review && $0.wordId == wordId && $0.dayKey == now.lucidDayKey }) {
+            next.progressByWordId[wordId] = progress
+            next.activities = activities + [LearningActivity(id: UUID(), kind: .review, wordId: wordId, date: now, dayKey: now.lucidDayKey, quality: effective.rawValue, productive: successful)]
+        }
+        appendContextEvidence(to: &next, wordId: wordId, kind: .unaidedRecall, quality: effective.rawValue, independent: contextMatches && persistedAttempt?.independent == true && originalIsFresh && !exposureBeforeOriginal, at: now, capturedAt: originalIsFresh ? persistedAttempt?.capturedAt : nil)
         data = next
         currentDate = now
-        return true
+        return !hasUnsavedChanges
     }
 
     @discardableResult
     func completeToday() -> Bool {
         let now = clock()
         guard !storageBlocked, !hasUnsavedChanges, data.lessonDayKey == now.lucidDayKey, !data.currentWordIds.isEmpty,
-              data.currentWordIds.allSatisfy(data.completedWordIdsToday.contains),
+              data.currentWordIds.allSatisfy(isCurrentRoleWordComplete),
               !data.sessions.contains(where: { $0.localDayKey == now.lucidDayKey }),
               !activities.contains(where: { $0.dayKey == now.lucidDayKey && $0.kind == .lesson }) else { return false }
         var next = data
@@ -649,6 +715,13 @@ final class LearningStore: ObservableObject {
     }
     func persist() {
         guard !isApplyingRemote, !storageBlocked else { return }
+        let shared = projectSharedLearning(data, at: clock())
+        if shared != data.sharedLearning {
+            var projected = data; projected.sharedLearning = shared
+            isApplyingRemote = true
+            data = projected
+            isApplyingRemote = false
+        }
         // Track memory mutations even when the disk write fails. An in-flight
         // cloud response must never replace a newer, temporarily unsaved draft.
         dataRevision += 1

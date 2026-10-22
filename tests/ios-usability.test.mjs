@@ -45,16 +45,16 @@ test("Home is visible on every main tab and Welcome always opens Today", async (
   const root = await source("RootView");
   assert.match(app, /Button\(action: store.openHome\)/);
   assert.match(app, /Image\(systemName: "house"\)/);
-  assert.match(app, /Text\("Home"\)/);
+  assert.match(app, /\bText\((?:"Home"|learningText\("Home"\))\)/);
   assert.match(app, /accessibilityIdentifier\("navigation.home"\)/);
   for (const [name, titles] of [["RootView", ["Today"]], ["SecondaryViews", ["Review", "Library", "Progress"]], ["SettingsView", ["Settings"]]]) {
     const view = await source(name);
-    for (const title of titles) assert.match(view, new RegExp(`navigationTitle\\("${title}"\\)\\s*\\.lucidHomeNavigation\\(\\)`));
+    for (const title of titles) assert.match(view, new RegExp(`navigationTitle\\((?:"${title}"|learningText\\("${title}"\\))\\)\\s*\\.lucidHomeNavigation\\(\\)`));
   }
   assert.match(root, /WelcomeView[\s\S]*?withAnimation[\s\S]*?store.openToday\(\)/);
 });
 
-test("Review uses current-role scope, one card, matching counts, and an explicit save step", async () => {
+test("Review uses current-role word scope, separate idiom entry, matching total badge, and an explicit save step", async () => {
   const review = await source("SecondaryViews");
   assert.match(review, /private var reviews: \[ProfessionalWord\] \{ store.visibleReviewWords \}/);
   assert.match(review, /selection: \$store.reviewIncludesOtherRoles/);
@@ -62,7 +62,8 @@ test("Review uses current-role scope, one card, matching counts, and an explicit
   assert.match(review, /Revealing the answer alone does not finish the review/);
   assert.match(review, /proxy.scrollTo\(reviews.isEmpty \|\| store.hasUnsavedChanges/);
   assert.match(review, /if store.hasUnsavedChanges[\s\S]*?Waiting to save your review/);
-  assert.match(await source("RootView"), /badge\(store.visibleReviewWords.count\)/);
+  assert.match(review, /DailyIdiomReviewEntry\(\)/);
+  assert.match(await source("RootView"), /badge\(store.visibleReviewWords.count \+ store.dueDailyIdioms.count\)/);
   assert.match(await source("ExperienceViews"), /store.currentRoleDueWords.count/);
 });
 
@@ -119,7 +120,7 @@ test("writing screens expose keyboard dismissal and accessibility scales with co
   }
   const app = await source("LucidApp");
   assert.match(app, /ToolbarItemGroup\(placement: \.keyboard\)/);
-  assert.match(app, /accessibilityLabel\("Dismiss keyboard"\)/);
+  assert.match(app, /accessibilityLabel\((?:"Dismiss keyboard"|learningText\("Dismiss keyboard"\))\)/);
   assert.match(await source("RootView"), /dynamicTypeSize.isAccessibilitySize \? 1/);
   assert.match(await source("SettingsView"), /accessibilityLabel\("Audio speed"\)/);
   assert.match(await source("LearningStore"), /search.trimmingCharacters\(in: \.whitespacesAndNewlines\)/);
@@ -134,7 +135,7 @@ test("Library uses store-scoped filters and resets without silently widening to 
   assert.match(view, /\.id\(store.libraryNavigationReset\)/);
   assert.match(view, /Your role’s full collection, not just today’s words/);
   assert.doesNotMatch(view, /Clear filters and show all words|@State private var selectedScope/);
-  assert.match(await source("RootView"), /Button\("Open my word library", action: store.openLibrary\)/);
+  assert.match(await source("RootView"), /Button\((?:"Open my word library"|learningText\("Open my word library"\)), action: store.openLibrary\)/);
 });
 
 test("feedback prevents duplicate success and accidental dismissal during submission", async () => {

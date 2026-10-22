@@ -11,7 +11,7 @@ final class LucidJourneyTests: XCTestCase {
             for _ in 0..<8 where !element.isHittable {
                 if up { app.swipeUp() } else { app.swipeDown() }
             }
-            XCTAssertTrue(element.isHittable, "Could not reach \(element)")
+            XCTAssertTrue(element.isHittable, "Could not reach \(element)\n\(app.debugDescription)")
         }
         let situation = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", "Month-end close")).firstMatch
         show(situation); situation.tap()
@@ -80,5 +80,31 @@ final class LucidJourneyTests: XCTestCase {
         welcome.name = "Welcome with new Lucid mark"
         welcome.lifetime = .keepAlways
         add(welcome)
+
+        // Exercise the actual new studio UI without injecting dates or learner state.
+        app.buttons["See today’s progress"].tap()
+        let studio = app.buttons["today.expression-studio"]
+        XCTAssertTrue(studio.waitForExistence(timeout: 8), app.debugDescription)
+        show(studio, up: false); studio.tap()
+        XCTAssertTrue(app.textViews["studio.gap"].waitForExistence(timeout: 8), app.debugDescription)
+        XCTAssertTrue(app.staticTexts["Find words for your next conversation."].exists)
+        // This authored focus also labels a rehearsal button. The later match is
+        // the Nuance navigation link in the following comparison panel.
+        let nuanceMatches = app.buttons.matching(NSPredicate(format: "label == %@", "Explain why you chose an approach"))
+        XCTAssertTrue(nuanceMatches.firstMatch.waitForExistence(timeout: 5), app.debugDescription)
+        XCTAssertGreaterThanOrEqual(nuanceMatches.count, 1)
+        let nuance = nuanceMatches.element(boundBy: nuanceMatches.count - 1)
+        show(nuance); nuance.tap()
+        XCTAssertTrue(app.navigationBars["Nuance"].waitForExistence(timeout: 5), app.debugDescription)
+        let fitting = app.buttons["The rationale for the pilot is to learn before committing."]
+        XCTAssertTrue(fitting.waitForExistence(timeout: 5), app.debugDescription)
+        show(fitting); fitting.tap()
+        let distinction = app.staticTexts["This fits the authored distinction. An explanation of a decision is not proof of its outcome."]
+        XCTAssertTrue(distinction.waitForExistence(timeout: 5), app.debugDescription)
+        show(distinction)
+        let nuanceScreenshot = XCTAttachment(screenshot: app.screenshot())
+        nuanceScreenshot.name = "Expression studio nuance distinction"
+        nuanceScreenshot.lifetime = .keepAlways
+        add(nuanceScreenshot)
     }
 }

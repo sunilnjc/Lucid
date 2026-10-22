@@ -62,28 +62,29 @@ extension View {
             .toolbar {
                 ToolbarItemGroup(placement: .keyboard) {
                     Spacer()
-                    Button("Done") {
+                    Button(learningText("Done")) {
                         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                     }
-                    .accessibilityLabel("Dismiss keyboard")
+                    .accessibilityLabel(learningText("Dismiss keyboard"))
                 }
             }
     }
 }
 
 struct LucidHomeButton: View {
+    @AppStorage(LearningLanguage.preferenceKey) private var learningLanguageCode = "en"
     @EnvironmentObject private var store: LearningStore
     var body: some View {
         Button(action: store.openHome) {
             HStack(spacing: 6) {
                 Image(systemName: "house")
-                Text("Home")
+                Text(learningText("Home"))
             }.frame(minHeight: 44)
         }
         .tint(LucidColour.mint)
-        .accessibilityLabel("Home")
+        .accessibilityLabel(learningText("Home"))
         .accessibilityIdentifier("navigation.home")
-        .accessibilityHint("Returns to the welcome screen without resetting your learning or drafts.")
+        .accessibilityHint(learningText("Returns to the welcome screen without resetting your learning or drafts."))
     }
 }
 

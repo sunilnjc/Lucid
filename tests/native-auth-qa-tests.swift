@@ -27,6 +27,17 @@ final class QAProtocol: URLProtocol {
     static func configure(_ value: @escaping (URLRequest) throws -> Reply) {
         lock.lock(); handler = value; lock.unlock()
     }
+    static func body(_ request: URLRequest) throws -> [String: Any] {
+        let bytes: Data
+        if let body = request.httpBody { bytes = body }
+        else if let stream = request.httpBodyStream {
+            stream.open(); defer { stream.close() }
+            var body = Data(), buffer = [UInt8](repeating: 0, count: 4096)
+            while true { let amount = stream.read(&buffer, maxLength: buffer.count); if amount <= 0 { break }; body.append(contentsOf: buffer.prefix(amount)) }
+            bytes = body
+        } else { throw QAError(description: "Missing fixture request body") }
+        return try JSONSerialization.jsonObject(with: bytes) as! [String: Any]
+    }
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -536,11 +547,16 @@ struct AuthQATests {
             store.hasUnsavedChanges = true
             store.storageNotice = "Earlier local save failed"
             store.accountNotice = "Earlier cloud request failed"
+            var accepted: LearnerData?
             QAProtocol.configure { request in
                 switch request.url?.path {
                 case "/auth/v1/user": return .init(body: user)
-                case "/rest/v1/lucid_state": return .init(body: [])
-                case "/rest/v1/rpc/lucid_save_state": return .init(body: 1)
+                case "/rest/v1/lucid_state": return .init(body: try accepted.map { [try json(CloudLearningRecord(revision: 1, state: $0))] } ?? [])
+                case "/rest/v1/rpc/lucid_save_state":
+                    let payload = try QAProtocol.body(request)
+                    guard let state = payload["new_state"] else { throw QAError(description: "Missing submitted fixture state") }
+                    accepted = try JSONDecoder().decode(LearnerData.self, from: JSONSerialization.data(withJSONObject: state))
+                    return .init(body: 1)
                 default: return .init(failure: URLError(.notConnectedToInternet))
                 }
             }

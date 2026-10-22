@@ -1,20 +1,21 @@
 import SwiftUI
 
 struct ReviewView: View {
+    @AppStorage(LearningLanguage.preferenceKey) private var learningLanguageCode = "en"
     @EnvironmentObject private var store: LearningStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var savedNotice: String?
     private var reviews: [ProfessionalWord] { store.visibleReviewWords }
-    private var roleLabel: String { store.selectedRole?.label ?? "your role" }
+    private var roleLabel: String { store.selectedRole.map { learningText($0.label) } ?? learningText("your role") }
     private var emptyMessage: String {
         if let date = store.nextScheduledReview(includeOtherRoles: store.reviewIncludesOtherRoles) {
-            return "Your next review in this collection is \(date.formatted(.dateTime.weekday(.wide).day().month(.wide)))."
+            return learningFormat("Your next review in this collection is {date}.", ["date": date.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(learningLanguage().locale))])
         }
         let hasLearnedWords = store.data.progressByWordId.keys.contains { id in
             guard let word = store.word(id: id) else { return false }
             return store.reviewIncludesOtherRoles || word.roles.contains(store.profile?.roleId ?? "")
         }
-        return hasLearnedWords ? "You’re done with the reviews available here today. Keep practising, and check back tomorrow." : "Practise a word for \(roleLabel) in Today first. Its first review is scheduled for tomorrow."
+        return hasLearnedWords ? learningText("You’re done with the reviews available here today. Keep practising, and check back tomorrow.") : learningFormat("Practise a word for {role} in Today first. Its first review is scheduled for tomorrow.", ["role": roleLabel])
     }
 
     var body: some View {
@@ -24,18 +25,19 @@ struct ReviewView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     Color.clear.frame(height: 0).id("reviewTop")
                     PracticeStatusBanner()
+                    DailyIdiomReviewEntry()
                     PageHeading(
-                        eyebrow: "1 · 3 · 7 · 14 · 30 DAYS",
-                        title: "Recall, then move forward.",
-                        description: "Recall one word, reveal the answer, then choose a rating to save your review. Words from other roles stay saved under All roles."
+                        eyebrow: learningText("1 · 3 · 7 · 14 · 30 DAYS"),
+                        title: learningText("Recall, then move forward."),
+                        description: learningText("Recall one word, reveal the answer, then choose a rating to save your review. Words from other roles stay saved under All roles.")
                     )
                     VStack(alignment: .leading, spacing: 12) {
-                        Text(store.reviewIncludesOtherRoles ? "All roles" : roleLabel).font(.headline).foregroundStyle(LucidColour.mint)
-                        Picker("Review collection", selection: $store.reviewIncludesOtherRoles) {
-                            Text("My role (\(store.currentRoleDueWords.count))").tag(false)
-                            Text("All roles (\(store.dueWords.count))").tag(true)
+                        Text(store.reviewIncludesOtherRoles ? learningText("All roles") : roleLabel).font(.headline).foregroundStyle(LucidColour.mint)
+                        Picker(learningText("Review collection"), selection: $store.reviewIncludesOtherRoles) {
+                            Text(learningFormat("My role ({count})", ["count": String(store.currentRoleDueWords.count)])).tag(false)
+                            Text(learningFormat("All roles ({count})", ["count": String(store.dueWords.count)])).tag(true)
                         }.pickerStyle(.segmented).accessibilityIdentifier("review.scope")
-                        Text(store.reviewIncludesOtherRoles ? "Showing scheduled reviews from all your roles." : "Showing scheduled reviews for \(roleLabel). Changing roles never deletes earlier practice.")
+                        Text(store.reviewIncludesOtherRoles ? learningText("Showing scheduled reviews from all your roles.") : learningFormat("Showing scheduled reviews for {role}. Changing roles never deletes earlier practice.", ["role": roleLabel]))
                             .font(.subheadline).foregroundStyle(LucidColour.secondaryOnDark)
                     }
                     if let savedNotice {
@@ -45,24 +47,24 @@ struct ReviewView: View {
                     if reviews.isEmpty {
                         EmptyState(
                             icon: "checkmark.circle.fill",
-                            title: store.reviewIncludesOtherRoles ? "You’re caught up" : "No reviews due for this role",
+                            title: store.reviewIncludesOtherRoles ? learningText("You’re caught up") : learningText("No reviews due for this role"),
                             message: emptyMessage
                         )
                         Button(action: store.openToday) {
-                            Label("Go to today’s practice", systemImage: "arrow.right")
+                            Label(learningText("Go to today’s practice"), systemImage: "arrow.right")
                                 .frame(maxWidth: .infinity, minHeight: 48)
                         }.buttonStyle(.bordered).tint(LucidColour.mint)
                     } else if let word = reviews.first {
-                        Text("\(reviews.count) \(reviews.count == 1 ? "review" : "reviews") remaining")
+                        Text(learningFormat("{count} reviews remaining", ["count": String(reviews.count)]))
                             .font(.subheadline.weight(.semibold)).foregroundStyle(LucidColour.secondaryOnDark)
                             .id("reviewCardTop")
                         ReviewCard(word: word) {
                             if store.hasUnsavedChanges {
                                 savedNotice = nil
-                                LucidAccessibility.announce("Waiting to save your review. Please use Try saving again before closing Lucid.")
+                                LucidAccessibility.announce(learningText("Waiting to save your review. Please use Try saving again before closing Lucid."))
                             } else {
-                                savedNotice = store.visibleReviewWords.isEmpty ? "Review saved. You’re caught up in this collection." : "Review saved. Here’s the next word."
-                                LucidAccessibility.announce("Review saved. \(store.visibleReviewWords.count) reviews remaining in this collection.")
+                                savedNotice = store.visibleReviewWords.isEmpty ? learningText("Review saved. You’re caught up in this collection.") : learningText("Review saved. Here’s the next word.")
+                                LucidAccessibility.announce(learningFormat("Review saved. {count} reviews remaining in this collection.", ["count": String(store.visibleReviewWords.count)]))
                             }
                         }
                         .id("\(store.profile?.roleId ?? "")-\(store.currentDate.lucidDayKey)-\(word.id)")
@@ -71,7 +73,7 @@ struct ReviewView: View {
                         Button {
                             store.reviewIncludesOtherRoles = true
                         } label: {
-                            Label("Include \(store.otherRoleDueWords.count) reviews from other roles", systemImage: "rectangle.stack")
+                            Label(learningFormat("Include {count} reviews from other roles", ["count": String(store.otherRoleDueWords.count)]), systemImage: "rectangle.stack")
                                 .frame(maxWidth: .infinity, minHeight: 48)
                         }.buttonStyle(.bordered).tint(LucidColour.mint)
                     }
@@ -87,7 +89,7 @@ struct ReviewView: View {
             }
             }
             .background(LucidNightBackground().ignoresSafeArea())
-            .navigationTitle("Review")
+            .navigationTitle(learningText("Review"))
             .lucidHomeNavigation()
             .lucidKeyboardDismissal()
             .navigationBarTitleDisplayMode(.inline)
@@ -101,6 +103,7 @@ struct ReviewView: View {
 }
 
 struct ReviewCard: View {
+    @AppStorage(LearningLanguage.preferenceKey) private var learningLanguageCode = "en"
     @EnvironmentObject private var store: LearningStore
     let word: ProfessionalWord
     var onSaved: (() -> Void)? = nil
@@ -108,9 +111,12 @@ struct ReviewCard: View {
     @AccessibilityFocusState private var questionFocused: Bool
     private var answerWordCount: Int { answer.wrappedValue.split(whereSeparator: \.isWhitespace).count }
     private var revealed: Bool { store.reviewAttempt(for: word.id) != nil }
-    private var attemptedIndependently: Bool { store.reviewAttempt(for: word.id)?.independent ?? false }
+    private var attemptedIndependently: Bool {
+        guard let attempt = store.reviewAttempt(for: word.id) else { return false }
+        return attempt.independent && attempt.roleId == store.profile?.roleId && attempt.senseId == "\(word.id)::\(store.profile?.roleId ?? "")"
+    }
     private var originalAttempt: String { store.reviewAttempt(for: word.id)?.originalAttempt ?? "" }
-    private var draftKey: String { "recall:\(store.currentDate.lucidDayKey):\(word.id)" }
+    private var draftKey: String { "recall:\(store.currentDate.lucidDayKey):\(store.profile?.roleId ?? ""):\(word.id)" }
     private var answer: Binding<String> {
         Binding(get: { store.data.practiceDrafts?[draftKey] ?? "" }, set: { value in
             var drafts = store.data.practiceDrafts ?? [:]
@@ -121,19 +127,20 @@ struct ReviewCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("CONTEXT · \(contextLabel)")
+            Text(learningFormat("CONTEXT · {role}", ["role": contextLabel]))
                 .font(.caption.weight(.semibold)).foregroundStyle(LucidColour.mint)
             if revealed {
                 Text(word.term).font(.system(.largeTitle, design: .serif))
                     .accessibilityAddTraits(.isHeader).accessibilityFocused($answerFocused)
                 Text(word.meaning).font(.title3)
-                CardDetail(label: "REFERENCE EXAMPLE", text: word.example)
+                LearningKoreanWordGuidance(wordID: word.id, roleID: reviewContentRoleID, includesUsage: true)
+                CardDetail(label: learningText("REFERENCE EXAMPLE"), text: word.example)
                 if !originalAttempt.isEmpty {
-                    CardDetail(label: "YOUR ATTEMPT", text: originalAttempt)
+                    CardDetail(label: learningText("YOUR ATTEMPT"), text: originalAttempt)
                 }
-                Text(attemptedIndependently ? "You recalled the word. Compare your meaning and usage with the example, then rate yourself honestly." : "Independent recall needs the target word in at least five words, without revealing a hint. This attempt is useful practice; choose Again or Hard and try recalling it next time.")
+                Text(attemptedIndependently ? learningText("You recalled the word. Compare your meaning and usage with the example, then rate yourself honestly.") : learningText("Independent recall needs the target word in at least five words, without revealing a hint. This attempt is useful practice; choose Again or Hard and try recalling it next time."))
                     .foregroundStyle(LucidColour.secondaryOnDark)
-                Text("Choose a rating below to save and move to the next word. Revealing the answer alone does not finish the review.")
+                Text(learningText("Choose a rating below to save and move to the next word. Revealing the answer alone does not finish the review."))
                     .font(.subheadline).foregroundStyle(LucidColour.mint)
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 125), spacing: 12)], spacing: 12) {
                     ForEach(ReviewQuality.allCases) { quality in
@@ -143,8 +150,8 @@ struct ReviewCard: View {
                             }
                         } label: {
                             VStack(spacing: 5) {
-                                Text(quality.label).font(.headline)
-                                Text(quality == .again ? "Try tomorrow" : (quality == .hard ? "Needed help" : (quality == .good ? "Recalled & used" : "Felt natural")))
+                                Text(learningText(quality.label)).font(.headline)
+                                Text(quality == .again ? learningText("Try tomorrow") : (quality == .hard ? learningText("Needed help") : (quality == .good ? learningText("Recalled & used") : learningText("Felt natural"))))
                                     .font(.caption)
                             }.frame(maxWidth: .infinity, minHeight: 56)
                         }
@@ -153,29 +160,29 @@ struct ReviewCard: View {
                     }
                 }
             } else {
-                Label("RECALL FIRST", systemImage: "brain.head.profile")
+                Label(learningText("RECALL FIRST"), systemImage: "brain.head.profile")
                     .font(.caption.weight(.bold)).tracking(1).foregroundStyle(LucidColour.mint)
-                Text("Which word fits?").font(.system(.title, design: .serif))
+                Text(learningText("Which word fits?")).font(.system(.title, design: .serif))
                     .accessibilityAddTraits(.isHeader).accessibilityFocused($questionFocused)
                 Text(word.meaning.replacingOccurrences(of: word.term, with: "______", options: [.caseInsensitive]))
                     .font(.title3).lineSpacing(4)
-                Text("Recall the word and use it in a workplace sentence of at least five words before you reveal the answer.")
+                Text(learningText("Recall the word and use it in a workplace sentence of at least five words before you reveal the answer."))
                     .foregroundStyle(LucidColour.secondaryOnDark)
                 TextEditor(text: answer)
                     .frame(minHeight: 108).padding(8).scrollContentBackground(.hidden)
                     .background(LucidColour.midnight, in: RoundedRectangle(cornerRadius: 12))
-                    .accessibilityLabel("Recall the word and write a workplace sentence")
+                    .accessibilityLabel(learningText("Recall the word and write a workplace sentence"))
                     .accessibilityIdentifier("review.answer")
-                Text("\(answerWordCount) words · At least 5 needed to check")
+                Text(learningFormat("{count} words · At least 5 needed to check", ["count": String(answerWordCount)]))
                     .font(.caption).foregroundStyle(LucidColour.secondaryOnDark)
                 Button {
                     store.revealReview(wordId: word.id, usingHint: false)
                 } label: {
-                    Text("Check my recall").frame(minHeight: 48)
+                    Text(learningText("Check my recall")).frame(minHeight: 48)
                 }
                 .buttonStyle(.borderedProminent).tint(LucidColour.mint).foregroundStyle(LucidColour.midnight)
                 .disabled(answerWordCount < 5)
-                Button("I don’t remember — show me") {
+                Button(learningText("I don’t remember — show me")) {
                     store.revealReview(wordId: word.id, usingHint: true)
                 }.font(.subheadline).frame(minHeight: 44)
             }
@@ -187,9 +194,14 @@ struct ReviewCard: View {
         .onAppear { if !revealed { questionFocused = true } }
     }
 
+    private var reviewContentRoleID: String {
+        let selected = store.profile?.roleId ?? ""
+        return word.roles.contains(selected) ? selected : word.roles.first ?? selected
+    }
+
     private var contextLabel: String {
-        if let role = store.selectedRole, word.roles.contains(role.id) { return role.shortLabel }
-        return "Other roles · " + store.catalog.roles.filter { word.roles.contains($0.id) }.map(\.shortLabel).joined(separator: " · ")
+        if let role = store.selectedRole, word.roles.contains(role.id) { return learningText(role.shortLabel) }
+        return learningText("Other roles · ") + store.catalog.roles.filter { word.roles.contains($0.id) }.map { learningText($0.shortLabel) }.joined(separator: " · ")
     }
 }
 
@@ -247,7 +259,7 @@ struct LibraryView: View {
                                     .foregroundStyle(LucidColour.secondaryOnDark)
                                     .lineLimit(2)
                                 if store.libraryIncludesOtherRoles {
-                                    Text(store.catalog.roles.filter { word.roles.contains($0.id) }.map(\.shortLabel).joined(separator: " · "))
+                                    Text(store.catalog.roles.filter { word.roles.contains($0.id) }.map { learningText($0.shortLabel) }.joined(separator: " · "))
                                         .font(.caption).foregroundStyle(LucidColour.mint)
                                 } else if word.roles.count > 1 {
                                     Text("Shared vocabulary").font(.caption).foregroundStyle(LucidColour.mint)
@@ -255,7 +267,7 @@ struct LibraryView: View {
                             }
                             Spacer()
                             if store.isFavourite(word.id) { Image(systemName: "bookmark.fill").foregroundStyle(LucidColour.coral) }
-                            if store.data.progressByWordId[word.id]?.mastered == true { Image(systemName: "checkmark.seal.fill").foregroundStyle(LucidColour.mint) }
+                            if store.contextIsRetained(wordId: word.id, roleId: store.profile?.roleId ?? "") { Image(systemName: "checkmark.seal.fill").foregroundStyle(LucidColour.mint) }
                         }
                         .padding(.vertical, 5)
                     }
@@ -275,6 +287,9 @@ struct LibraryView: View {
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
+        .onAppear { store.markContextExposures(wordIds: words.map(\.id)) }
+        .onChange(of: store.librarySearch) { _, _ in store.markContextExposures(wordIds: words.map(\.id)) }
+        .onChange(of: store.libraryIncludesOtherRoles) { _, _ in store.markContextExposures(wordIds: words.map(\.id)) }
         .id(store.libraryNavigationReset)
         .preferredColorScheme(.dark)
     }
@@ -325,6 +340,7 @@ struct WordDetailView: View {
         .toolbarBackground(LucidColour.midnight.opacity(0.94), for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar)
         .toolbarColorScheme(.dark, for: .navigationBar)
+        .onAppear { store.markContextExposure(wordId: word.id) }
         .onDisappear { player.stop() }
     }
 }
@@ -347,10 +363,16 @@ struct InsightsView: View {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 145), spacing: 12)], spacing: 12) {
                         MetricCard(value: "\(store.streak)", label: "day streak", colour: LucidColour.coral)
                         MetricCard(value: "\(store.learnedCount)", label: "words started", colour: LucidColour.teal)
-                        MetricCard(value: "\(store.masteredCount)", label: "words mastered", colour: LucidColour.gold)
+                        MetricCard(value: "\(store.retainedContextCount)", label: "recall contexts retained", colour: LucidColour.gold)
                         MetricCard(value: "\(store.data.sessions.count)", label: "lessons completed", colour: LucidColour.mint)
                     }
 
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Learning evidence for your role").font(.headline)
+                        Text("Guided recognition: \(store.recognizedContextCount) · Unaided recall: \(store.recalledContextCount) · Self-assessed production: \(store.producedContextCount)")
+                        if store.historicalMasteredCount > 0 { Text("Earlier word mastery milestones: \(store.historicalMasteredCount)").font(.subheadline).accessibilityIdentifier("progress.historical-mastery") }
+                        Text("These categories describe different tasks. Phrase checks and self-assessment do not verify semantic accuracy. Earlier global word milestones remain in your saved history; they do not automatically establish retention in another role.").font(.subheadline).foregroundStyle(LucidColour.secondaryOnDark)
+                    }.padding(20).background(LucidColour.surface, in: RoundedRectangle(cornerRadius: 18))
                     WeeklyPracticeView()
                     VStack(alignment: .leading, spacing: 16) {
                         HStack {
@@ -380,7 +402,7 @@ struct InsightsView: View {
                         Text("Your retention system")
                             .font(.title2.weight(.semibold))
                             .foregroundStyle(LucidColour.textOnDark)
-                        Text("Lucid schedules independent recall across 1, 3, 7, 14, and 30-day intervals. A word earns the retained milestone after successful recall on three separate days, including one at least 30 days after you first practised it. Ratings are your own self-assessment.")
+                        Text("Lucid keeps your existing 1, 3, 7, 14, and 30-day review schedules. A context earns the retained milestone after unaided recall on three separate days, including one at least 30 days after the first evidence in that role. Your latest review must be successful. Ratings are your own self-assessment.")
                             .foregroundStyle(LucidColour.secondaryOnDark)
                             .lineSpacing(4)
                         HStack(spacing: 5) {

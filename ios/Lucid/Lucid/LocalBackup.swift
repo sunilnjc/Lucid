@@ -3,20 +3,29 @@ import UniformTypeIdentifiers
 
 struct LucidBackupDocument: FileDocument {
     static var readableContentTypes: [UTType] { [.json] }
+    static let maximumByteCount = 2_000_000
     let content: Data
     init(data: LearnerData) throws {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
-        content = try encoder.encode(LearningPersistence.Envelope(version: 2, learner: data))
+        var learner = data; learner.portableWebCompanion = nil
+        let encoded = try encoder.encode(LearningPersistence.Envelope(version: 2, learner: learner, webLearningBackup: data.portableWebCompanion))
+        guard encoded.count <= Self.maximumByteCount else { throw BackupError.tooLarge }
+        content = encoded
     }
     init(configuration: ReadConfiguration) throws {
-        guard let data = configuration.file.regularFileContents, data.count <= 2_000_000 else { throw BackupError.invalid }
+        guard let data = configuration.file.regularFileContents, data.count <= Self.maximumByteCount else { throw BackupError.invalid }
         content = data
     }
     func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: content) }
     enum BackupError: LocalizedError {
-        case invalid
-        var errorDescription: String? { "That file is not a supported Lucid backup. Your current progress has not changed." }
+        case invalid, tooLarge
+        var errorDescription: String? {
+            switch self {
+            case .invalid: "That file is not a supported Lucid backup. Your current progress has not changed."
+            case .tooLarge: "This backup exceeds the current 2 MB limit. Your learning is still saved on this device. Contact support before moving or clearing this device."
+            }
+        }
     }
 }
 
@@ -27,12 +36,15 @@ extension LearningStore {
         let hasAccess = url.startAccessingSecurityScopedResource()
         defer { if hasAccess { url.stopAccessingSecurityScopedResource() } }
         let size = try url.resourceValues(forKeys: [.fileSizeKey]).fileSize ?? 0
-        guard size <= 2_000_000 else { throw LucidBackupDocument.BackupError.invalid }
+        guard size <= LucidBackupDocument.maximumByteCount else { throw LucidBackupDocument.BackupError.invalid }
         let bytes = try Data(contentsOf: url)
-        guard bytes.count <= 2_000_000 else { throw LucidBackupDocument.BackupError.invalid }
+        guard bytes.count <= LucidBackupDocument.maximumByteCount else { throw LucidBackupDocument.BackupError.invalid }
         let envelope = try JSONDecoder().decode(LearningPersistence.Envelope.self, from: bytes)
         guard envelope.version == 2 else { throw LucidBackupDocument.BackupError.invalid }
-        let incoming = envelope.learner
+        var incoming = envelope.learner
+        incoming.portableWebCompanion = envelope.webLearningBackup ?? incoming.portableWebCompanion
+        guard incoming.sharedLearning?.isValid ?? true else { throw LucidBackupDocument.BackupError.invalid }
+        guard incoming.dailyVocabulary.map({ DailyVocabularyEngine.isValid($0, catalog: catalog, idioms: suppliedDailyIdiomCatalog) }) ?? true else { throw LucidBackupDocument.BackupError.invalid }
         let ids = Set(catalog.words.map(\.id))
         guard incoming.introducedWordIds.allSatisfy(ids.contains),
               incoming.currentWordIds.count <= 3,
@@ -41,6 +53,22 @@ extension LearningStore {
               incoming.progressByWordId.values.allSatisfy({ (0...4).contains($0.intervalIndex) && $0.reviewCount >= 0 && $0.lapses >= 0 }) else {
             throw LucidBackupDocument.BackupError.invalid
         }
+        let groupedEvidence = Dictionary(grouping: incoming.contextEvidence ?? [], by: { $0.id.lowercased() })
+        guard groupedEvidence.values.allSatisfy({ events in
+            guard let first = events.first else { return true }
+            return events.allSatisfy { $0.wordId == first.wordId && $0.roleId == first.roleId && $0.senseId == first.senseId && $0.kind == first.kind && $0.date == first.date }
+        }), (incoming.contextIntroducedOn ?? [:]).allSatisfy({ key, date in
+            date.timeIntervalSinceReferenceDate.isFinite && catalog.words.contains { word in word.roles.contains { key == "\(word.id)::\($0)" } }
+        }) else { throw LucidBackupDocument.BackupError.invalid }
+        guard (incoming.contextEvidence ?? []).allSatisfy({ event in
+            event.isValid && ContextEvidence.calendarDay(event.date) != nil && catalog.words.contains { $0.id == event.wordId && $0.roles.contains(event.roleId) }
+        }), (incoming.expressionGaps ?? []).allSatisfy({ gap in
+            catalog.roles.contains { $0.id == gap.roleId } && gap.situation.count <= 2_000 && ["plain", "precise", "diplomatic"].contains(gap.selectedStyle)
+        }), (incoming.rehearsalSessions ?? [:]).allSatisfy({ key, session in
+            key == session.id.uuidString && catalog.roles.contains { $0.id == session.roleId } && session.response.count <= 2_000 && session.retry.count <= 2_000 && ["rehearsal", "delayed", "transfer", "comeback"].contains(session.mode)
+        }), (incoming.transferSessions ?? [:]).allSatisfy({ key, session in
+            key == session.id && catalog.roles.contains { $0.id == session.roleId } && session.scenarioIds.count <= 3 && session.completedScenarioIds.allSatisfy(session.scenarioIds.contains) && ["transfer", "comeback"].contains(session.mode)
+        }) else { throw LucidBackupDocument.BackupError.invalid }
         if let profile = incoming.profile {
             guard let role = catalog.roles.first(where: { $0.id == profile.roleId }),
                   catalog.seniorityLevels.contains(where: { $0.id == profile.seniorityId }),

@@ -463,7 +463,7 @@ test("exposes professional onboarding, practice, and beta-feedback surfaces", as
   for (const required of [
     /profession(?:al role)?/i,
     /seniority/i,
-    /communication situations?/i,
+    /(?:communication situations?|Which moments matter every week)/i,
     /(?:learning )?goals?/i,
   ]) {
     assert.match(source, required, `missing onboarding field ${required}`);
@@ -475,7 +475,6 @@ test("exposes professional onboarding, practice, and beta-feedback surfaces", as
     /avoid(?: this)?/i,
     /collocations?/i,
     /written practice/i,
-    /spoken practice/i,
   ]) {
     assert.match(source, required, `missing professional lesson surface ${required}`);
   }
@@ -483,6 +482,22 @@ test("exposes professional onboarding, practice, and beta-feedback surfaces", as
   assert.match(source, /beta feedback/i);
   assert.match(source, /fetch\(["']\/api\/feedback["']/);
   assert.match(source, /<textarea\b/i, "beta feedback needs a written entry field");
+});
+
+test("web learning stays text-only while native speech policy remains available", async () => {
+  const [source, nativeServices] = await Promise.all([
+    applicationSource(),
+    readFile(new URL("ios/Lucid/Lucid/Services.swift", root), "utf8"),
+  ]);
+
+  assert.doesNotMatch(
+    source,
+    /\b(?:SpeechRecognition|webkitSpeechRecognition|SpeechSynthesisUtterance)\b|\bspeechSynthesis\b|(?:mediaDevices|navigator)\s*\.\s*getUserMedia\b/,
+    "interactive web components must not invoke microphone, recognition or speech synthesis APIs",
+  );
+  assert.match(source, /optional written practice/i);
+  assert.match(nativeServices, /SFSpeechRecognizer/);
+  assert.match(nativeServices, /AVSpeechSynthesizer/);
 });
 
 test("keeps Settings and lesson progress available in responsive navigation", async () => {

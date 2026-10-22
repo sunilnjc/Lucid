@@ -234,12 +234,19 @@ struct LucidLaunchTests {
         tests.append(("productive review-only days maintain an activity streak", {
             var initial = LearnerData(); initial.profile = profile
             initial.introducedWordIds = roleWords.map(\.id)
+            // This fixture represents a completed course in this role, rather
+            // than importing legacy global familiarity as new context credit.
+            initial.contextIntroducedOn = Dictionary(uniqueKeysWithValues: roleWords.map {
+                ("\($0.id)::\(role.id)", day(-10))
+            })
             initial.progressByWordId[word.id] = WordProgress(introducedOn: day(-10), nextReviewOn: day(0))
             initial.activities = [LearningActivity(id: UUID(), kind: .review, wordId: roleWords[1].id,
                 date: day(-1), dayKey: day(-1).lucidDayKey, quality: 2, productive: true)]
             let (store, _, _) = try makeStore(catalogue: limited(catalogue, words: roleWords), date: baseline, initial: initial)
             store.prepareToday()
             try require(store.todayWords.isEmpty, "The review-only fixture should have no new words")
+            store.data.practiceDrafts = ["recall:\(baseline.lucidDayKey):\(word.id)": practiceSentence(word)]
+            store.revealReview(wordId: word.id, usingHint: false)
             try require(store.review(wordId: word.id, quality: .good, productive: true), "Productive recall was not recorded")
             try require(store.streak == 2, "Review-only learning broke the activity streak")
             try require(store.data.sessions.isEmpty, "Review-only practice fabricated a daily lesson completion")
@@ -253,6 +260,10 @@ struct LucidLaunchTests {
             try require(store.markTodayWord(word.id, quality: .good), "Could not introduce the mastery fixture")
             for (offset, expectedCount) in [(1, 1), (4, 2), (30, 3)] {
                 clock.date = day(offset); store.refreshDay()
+                var drafts = store.data.practiceDrafts ?? [:]
+                drafts["recall:\(clock.date.lucidDayKey):\(word.id)"] = practiceSentence(word)
+                store.data.practiceDrafts = drafts
+                store.revealReview(wordId: word.id, usingHint: false)
                 try require(store.review(wordId: word.id, quality: .good, productive: true), "Due productive review at day \(offset) failed")
                 let progress = store.data.progressByWordId[word.id]!
                 try require(progress.successfulReviewDates.count == expectedCount, "Productive dates were not deduplicated")

@@ -14,13 +14,31 @@ targets:
   LucidUIQA:
     type: application
     platform: iOS
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: Lucid QA
+        UIUserInterfaceStyle: Dark
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: false
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        LucidCloudAuthEnabled: 'NO'
+        LucidEmailDeliveryReady: 'NO'
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
+          NSExceptionDomains:
+            localhost:
+              NSExceptionAllowsInsecureHTTPLoads: true
+            127.0.0.1:
+              NSExceptionAllowsInsecureHTTPLoads: true
     sources:
       - path: ../../ios/Lucid/Lucid
         excludes: [Info.plist]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.sunilnjc.lucid.uiqa
-        GENERATE_INFOPLIST_FILE: YES
+        GENERATE_INFOPLIST_FILE: NO
         INFOPLIST_KEY_UIUserInterfaceStyle: Dark
         INFOPLIST_KEY_LucidCloudAuthEnabled: 'NO'
         INFOPLIST_KEY_LucidEmailDeliveryReady: 'NO'
@@ -47,4 +65,44 @@ schemes:
         LucidUIQA: all
         LucidJourneyTests: [test]
     test:
+      targets: [LucidJourneyTests]
+
+  LucidSharedJourneyQA:
+    build:
+      targets:
+        LucidUIQA: all
+        LucidJourneyTests: [test]
+    test:
+      environmentVariables:
+        LUCID_UIQA_RUN_SHARED: '1'
+      targets: [LucidJourneyTests]
+
+  LucidDailyJourneyQA:
+    build:
+      targets:
+        LucidUIQA: all
+        LucidJourneyTests: [test]
+    test:
+      environmentVariables:
+        LUCID_UIQA_RUN_DAILY: '1'
+      targets: [LucidJourneyTests]
+
+  LucidDailyDueJourneyQA:
+    build:
+      targets:
+        LucidUIQA: all
+        LucidJourneyTests: [test]
+    test:
+      environmentVariables:
+        LUCID_UIQA_RUN_DAILY_DUE: '1'
+      targets: [LucidJourneyTests]
+
+  LucidKoreanJourneyQA:
+    build:
+      targets:
+        LucidUIQA: all
+        LucidJourneyTests: [test]
+    test:
+      environmentVariables:
+        LUCID_UIQA_RUN_KOREAN: '1'
       targets: [LucidJourneyTests]

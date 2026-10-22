@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @AppStorage(LearningLanguage.preferenceKey) private var learningLanguageCode = "en"
     @EnvironmentObject private var store: LearningStore
     @State private var notificationStatus: String?
     @State private var showResetConfirmation = false
@@ -34,6 +35,11 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                Section(learningText("Learning language")) {
+                    LearningLanguagePicker()
+                    LearningCoverageNote()
+                }.listRowBackground(LucidColour.surface)
+
                 if store.storageNotice != nil {
                     Section { PracticeStatusBanner() }.listRowBackground(LucidColour.surface)
                 }
@@ -69,6 +75,7 @@ struct SettingsView: View {
                     }
                     Button("Export a learning backup") {
                         do { backupDocument = try LucidBackupDocument(data: store.data); exportBackup = true }
+                        catch let error as LucidBackupDocument.BackupError { backupStatus = error.localizedDescription }
                         catch { backupStatus = "Your backup could not be prepared. Please try again." }
                     }
                     if store.session == nil { Button("Restore a learning backup") { chooseRestoreMode = true } }
@@ -164,7 +171,7 @@ struct SettingsView: View {
             .foregroundStyle(LucidColour.textOnDark)
             .tint(LucidColour.mint)
             .background(LucidNightBackground().ignoresSafeArea())
-            .navigationTitle("Settings")
+            .navigationTitle(learningText("Settings"))
             .lucidHomeNavigation()
             .toolbarBackground(LucidColour.midnight.opacity(0.94), for: .navigationBar)
             .toolbarBackground(.visible, for: .navigationBar)

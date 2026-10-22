@@ -47,6 +47,8 @@ export interface WordMastery {
   nextReviewOn: DateKey;
   lastReviewedOn?: DateKey;
   lastQuality?: ReviewQuality;
+  /** A successful recognition rating cannot restore independent-recall mastery. */
+  lastProductive?: boolean;
   reviewCount: number;
   successfulReviewCount: number;
   lapses: number;
@@ -202,7 +204,7 @@ export function reviewWord(
     productiveSuccessDates.length >= 3 && retainedAfter30Days;
   // A weak answer after attaining mastery suspends current mastery until a
   // subsequent successful retrieval, while keeping the historical evidence.
-  const mastered = hasMasteryEvidence && successful;
+  const mastered = hasMasteryEvidence && successful && attempt.productive;
 
   return {
     ...state,
@@ -211,14 +213,16 @@ export function reviewWord(
     nextReviewOn: addCalendarDays(attempt.reviewedOn, intervalDays),
     lastReviewedOn: attempt.reviewedOn,
     lastQuality: attempt.quality,
+    lastProductive: attempt.productive,
     reviewCount: state.reviewCount + 1,
     successfulReviewCount: state.successfulReviewCount + (successful ? 1 : 0),
     lapses: state.lapses + (attempt.quality === 0 ? 1 : 0),
     productiveSuccessDates,
     retainedAfter30Days,
     mastered,
-    masteredOn:
-      state.masteredOn ?? (mastered ? attempt.reviewedOn : undefined),
+    ...(state.masteredOn || mastered
+      ? { masteredOn: state.masteredOn ?? attempt.reviewedOn }
+      : {}),
   };
 }
 
@@ -230,7 +234,8 @@ export function isWordMastered(state: WordMastery): boolean {
   return (
     productiveSuccessDates.length >= 3 &&
     hasThirtyDayRetention &&
-    (state.lastQuality ?? 0) >= 2
+    (state.lastQuality ?? 0) >= 2 &&
+    state.lastProductive === true
   );
 }
 

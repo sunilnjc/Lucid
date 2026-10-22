@@ -135,7 +135,7 @@ final class RoleEdgeProtocol: URLProtocol {
                 try validRole(finance.id, store)
                 try edgeRequire(store.todayWords.count == 3, "Empty cached plan hid a new learner's available course")
             }),
-            ("a shared word practised in one role is already credited in another cached role plan", {
+            ("a shared word keeps global history but needs fresh practice in another cached role plan", {
                 let shared = catalog.words.first { $0.learningMode == "active" && $0.roles.count > 1 }!
                 let first = catalog.roles.first { $0.id == shared.roles[0] }!
                 let second = catalog.roles.first { $0.id == shared.roles[1] }!
@@ -147,13 +147,20 @@ final class RoleEdgeProtocol: URLProtocol {
                 store.prepareToday(); try practise(shared.id, store)
                 let progress = store.data.progressByWordId[shared.id]; let xp = store.totalXP
                 store.finishOnboarding(profile: profile(second), goal: 1)
-                try edgeRequire(store.data.currentWordIds == [shared.id] && store.data.completedWordIdsToday.contains(shared.id), "Shared vocabulary lost its existing same-day credit")
-                try edgeRequire(store.lessonProgress == 1 && !store.markTodayWord(shared.id, quality: .good), "Shared word was offered duplicate practice credit")
+                try edgeRequire(store.data.currentWordIds == [shared.id] && store.data.completedWordIdsToday.contains(shared.id)
+                                && !store.isCurrentRoleWordComplete(shared.id), "Role change lost global history or fabricated context completion")
+                try edgeRequire(store.lessonProgress == 0, "A first-role answer completed the second role's lesson")
+                try practise(shared.id, store)
+                try edgeRequire(store.lessonProgress == 1 && !store.markTodayWord(shared.id, quality: .good),
+                                "Fresh second-role practice did not complete exactly once")
                 try edgeRequire(store.totalXP == xp && store.data.progressByWordId[shared.id] == progress, "Shared-word role switch rewrote rewards or review schedule")
             }),
             ("switching to an exhausted role shows reviews without leaking another role's cards", {
                 let financeIDs = catalog.words.filter { $0.learningMode == "active" && $0.roles.contains(finance.id) }.map(\.id)
                 var initial = LearnerData(); initial.profile = profile(technology); initial.introducedWordIds = financeIDs
+                initial.contextIntroducedOn = Dictionary(uniqueKeysWithValues: financeIDs.map {
+                    ("\($0)::\(finance.id)", today.lucidAdding(days: -10))
+                })
                 for id in financeIDs { initial.progressByWordId[id] = WordProgress(introducedOn: today.lucidAdding(days: -10), nextReviewOn: today.lucidStartOfDay) }
                 let (store, _, _) = try makeStore(catalog, today, initial)
                 store.prepareToday(); try validRole(technology.id, store)
@@ -235,7 +242,7 @@ final class RoleEdgeProtocol: URLProtocol {
                 store.finishOnboarding(profile: profile(finance), goal: 3)
                 try edgeRequire(store.data.currentWordIds == financeIDs, "Raced sync forgot the original role's daily plan")
             }),
-            ("a newer remote role selection intentionally replaces a conflicting cached plan while keeping earned credit", {
+            ("a newer remote role selection restores the role while the earliest canonical plan preserves all earned credit", {
                 let (local, _, _) = try makeStore(catalog, today)
                 local.finishOnboarding(profile: profile(finance), goal: 2)
                 let oldFinanceIDs = local.data.currentWordIds
@@ -243,23 +250,32 @@ final class RoleEdgeProtocol: URLProtocol {
                 local.finishOnboarding(profile: profile(technology), goal: 2)
                 try practise(local.data.currentWordIds[0], local)
                 let localCredit = Set(local.data.completedWordIdsToday)
-                let (remote, _, _) = try makeStore(catalog, today.addingTimeInterval(120))
-                remote.finishOnboarding(profile: profile(finance), goal: 2)
+                let (remoteSeed, _, _) = try makeStore(catalog, today.addingTimeInterval(120))
+                remoteSeed.finishOnboarding(profile: profile(finance), goal: 2)
                 let replacementIDs = Array(catalog.words.filter { $0.learningMode == "active" && $0.roles.contains(finance.id) && !oldFinanceIDs.contains($0.id) }.suffix(2).map(\.id))
-                remote.data.currentWordIds = replacementIDs
+                // Authentic older-client fixture: all native plan/cache fields agree;
+                // it predates the shared snapshot rather than editing one live field.
+                var legacyRemote = remoteSeed.data
+                legacyRemote.sharedLearning = nil
+                legacyRemote.currentWordIds = replacementIDs
+                legacyRemote.dailyRolePlans?[finance.id] = .init(dayKey: today.lucidDayKey, wordIds: replacementIDs, completedWordIds: [])
+                let (remote, _, _) = try makeStore(catalog, today.addingTimeInterval(120), legacyRemote)
                 remote.prepareToday()
                 try practise(replacementIDs[0], remote)
                 let merged = LearningMerge.combine(local: local.data, remote: LearningMerge.cloudRecord(remote.data))
                 let (restored, _, _) = try makeStore(catalog, today.addingTimeInterval(180), merged)
                 restored.prepareToday()
                 try validRole(finance.id, restored)
-                try edgeRequire(restored.data.currentWordIds == replacementIDs, "A stale local cache overruled the newer remote role's active plan")
-                try edgeRequire(restored.data.dailyRolePlans?[finance.id]?.wordIds == replacementIDs, "The active remote plan was not stored as the consistent Finance plan")
+                try edgeRequire(restored.data.currentWordIds == oldFinanceIDs, "A later competing snapshot rerolled the canonical Finance plan")
+                try edgeRequire(restored.data.dailyRolePlans?[finance.id]?.wordIds == oldFinanceIDs, "The frozen plan was not stored as the consistent Finance cache")
                 try edgeRequire(Set(restored.data.completedWordIdsToday).isSuperset(of: localCredit.union([replacementIDs[0]])), "Replacing an archived role plan discarded earlier same-day practice credit")
-                try edgeRequire(!restored.markTodayWord(replacementIDs[0], quality: .good), "Remote active-plan replacement allowed duplicate practice credit")
+                try edgeRequire(restored.totalXP == local.totalXP + remote.totalXP, "Canonical plan merge lost or duplicated earned practice XP")
+                let mergedXP = restored.totalXP
+                try edgeRequire(!restored.markTodayWord(oldFinanceIDs[0], quality: .good) && !restored.markTodayWord(replacementIDs[0], quality: .good)
+                                && restored.totalXP == mergedXP, "Canonical or replaced cards allowed duplicate practice credit")
                 restored.finishOnboarding(profile: profile(technology), goal: 2)
                 restored.finishOnboarding(profile: profile(finance), goal: 2)
-                try edgeRequire(restored.data.currentWordIds == replacementIDs, "Ordinary local switching resurrected the superseded Finance cache")
+                try edgeRequire(restored.data.currentWordIds == oldFinanceIDs, "Ordinary role switching rerolled the frozen canonical Finance plan")
             }),
             ("consented guest-to-account import retains visited-role plans and completed practice", {
                 let (seed, _, _) = try makeStore(catalog, today)

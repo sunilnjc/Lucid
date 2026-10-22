@@ -398,10 +398,16 @@ func tapExpect(_ value: @autoclosure () throws -> Bool, _ message: String) throw
             let progress = store.data.progressByWordId
             try tapExpect(store.finishOnboarding(profile: profile(secondRole)), "Shared role switch failed")
             let next = try challenge(store)
-            try tapExpect(store.data.completedWordIdsToday.contains(shared.id) && store.continuePractice(next), "Shared-word credit lost")
+            try tapExpect(store.data.completedWordIdsToday.contains(shared.id) && !store.isCurrentRoleWordComplete(shared.id),
+                          "Global history should remain while a new role requires its own practice")
+            try tapExpect(!store.continuePractice(next), "Another role's answer completed the new context")
+            try tapExpect(store.answerPractice(next, choiceId: next.correctId) && store.isCurrentRoleWordComplete(shared.id),
+                          "Fresh guided practice could not introduce the new role context")
             try tapExpect(!store.answerPractice(next, choiceId: next.correctId) && !store.completeToday(), "Shared role minted duplicate credit")
             try tapExpect(store.totalXP == 30 && store.data.sessions.count == 1 && store.data.progressByWordId == progress,
                           "Shared-word switch altered credit/schedule")
+            try tapExpect(store.evidence(kind: .recognition).contains { $0.wordId == shared.id && $0.roleId == secondRole.id },
+                          "Fresh second-role practice lost its contextual recognition evidence")
         }
         test("bookmark remains independent of answering, hints, cursors and daily credit") {
             let (store, _) = try make()

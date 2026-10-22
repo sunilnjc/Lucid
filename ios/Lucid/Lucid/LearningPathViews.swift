@@ -32,7 +32,7 @@ struct LearningPathSummary: View {
             if !store.startingCheckQuestions.isEmpty { CourseStartingPointCard(path: path) }
         } else if let role = store.selectedRole {
             let words = store.catalog.words.filter { $0.learningMode == "active" && $0.roles.contains(role.id) }
-            let started = words.filter { store.data.introducedWordIds.contains($0.id) }.count
+            let started = words.filter { store.contextHasIntroduction(wordId: $0.id, roleId: store.profile?.roleId ?? "") }.count
             VStack(alignment: .leading, spacing: 10) {
                 Text("YOUR ROLE COLLECTION").font(.caption.bold()).tracking(0.8).foregroundStyle(LucidColour.mint)
                 Text(role.label).font(.title3.bold()).foregroundStyle(LucidColour.textOnDark)
@@ -66,7 +66,7 @@ struct LearningPathView: View {
                         Text(module.title).font(.system(.title2, design: .serif)).fixedSize(horizontal: false, vertical: true)
                         Text(module.outcome).foregroundStyle(LucidColour.secondaryOnDark)
                         ForEach(module.lessons) { lesson in
-                            let count = lesson.wordIds.filter(store.data.introducedWordIds.contains).count
+                            let count = lesson.wordIds.filter { store.contextHasIntroduction(wordId: $0, roleId: store.profile?.roleId ?? "") }.count
                             let isNext = store.nextPathLesson?.id == lesson.id
                             NavigationLink {
                                 PathLessonView(lesson: lesson)
@@ -297,6 +297,7 @@ struct PathLessonView: View {
                         .font(.caption).foregroundStyle(LucidColour.secondaryOnDark)
                     DisclosureGroup("Compare with one possible response", isExpanded: $showExample) {
                         Text(lesson.exampleResponse).font(.body).padding(.top, 12).lineSpacing(4)
+                            .onAppear { store.markContextExposures(wordIds: lesson.wordIds) }
                     }.tint(LucidColour.mint)
                     Text("Self-check: Is the meaning accurate? Is your point clear? Have you given the reader a useful next step? There is no automatic correctness score for this task.")
                         .font(.subheadline).foregroundStyle(LucidColour.secondaryOnDark)
@@ -311,6 +312,7 @@ struct PathLessonView: View {
         }
         .foregroundStyle(LucidColour.textOnDark).lucidBackground()
         .navigationTitle("Workplace lesson").navigationBarTitleDisplayMode(.inline)
+        .onAppear { store.markContextExposures(wordIds: lesson.wordIds) }
         .lucidKeyboardDismissal()
         .toolbarBackground(LucidColour.midnight, for: .navigationBar)
         .toolbarBackground(.visible, for: .navigationBar).toolbarColorScheme(.dark, for: .navigationBar)

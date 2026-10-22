@@ -3,9 +3,18 @@ import Foundation
 /// A versioned, atomic record and last known good backup, protected by iOS Data Protection.
 struct LearningPersistence {
     private struct Header: Decodable { let version: Int }
+    // Read a future sidecar's version before decoding its unknown payload shape.
+    private struct DailyVersionHeader: Decodable {
+        struct Learner: Decodable {
+            struct Feature: Decodable { let version: Int }
+            let dailyVocabulary: Feature?
+        }
+        let learner: Learner
+    }
     struct Envelope: Codable {
         let version: Int
         let learner: LearnerData
+        var webLearningBackup: StudioJSONValue? = nil
     }
     struct Loaded {
         let data: LearnerData
@@ -91,8 +100,13 @@ struct LearningPersistence {
     private func decode(_ url: URL) throws -> LearnerData {
         let bytes = try Data(contentsOf: url)
         guard try JSONDecoder().decode(Header.self, from: bytes).version == 2 else { throw PersistenceError.newerVersion }
+        if let version = try JSONDecoder().decode(DailyVersionHeader.self, from: bytes).learner.dailyVocabulary?.version, version != 1 { throw PersistenceError.newerVersion }
         let envelope = try JSONDecoder().decode(Envelope.self, from: bytes)
-        return envelope.learner
+        var learner = envelope.learner
+        if let shared = learner.sharedLearning, shared.version != 1 { throw PersistenceError.newerVersion }
+        if let shared = learner.sharedLearning, !shared.isValid { throw PersistenceError.unreadable }
+        learner.portableWebCompanion = envelope.webLearningBackup ?? learner.portableWebCompanion
+        return learner
     }
 
     func save(_ data: LearnerData, scope: String) throws {
@@ -140,6 +154,15 @@ struct LearningPersistence {
                let header = try? JSONDecoder().decode(Header.self, from: bytes), header.version != 2 {
                 throw PersistenceError.newerVersion
             }
+            if let bytes = try? Data(contentsOf: source),
+               let root = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+               let learner = root["learner"] as? [String: Any] {
+                for key in ["sharedLearning", "dailyVocabulary"] {
+                    if let feature = learner[key] as? [String: Any], let version = feature["version"] as? Int, version != 1 {
+                        throw PersistenceError.newerVersion
+                    }
+                }
+            }
         }
         let archive = directory.appendingPathComponent("Recovery-\(UUID().uuidString)", isDirectory: true)
         try manager.createDirectory(at: archive, withIntermediateDirectories: true)
@@ -169,6 +192,9 @@ enum LearningMerge {
     /// Practice drafts and notification settings deliberately remain on their originating device.
     static func combine(local: LearnerData, remote: LearnerData) -> LearnerData {
         var result = local
+        let milestones = Set((local.historicalMasteredWordIds ?? []) + local.progressByWordId.filter { $0.value.mastered }.map(\.key))
+        result.historicalMasteredWordIds = milestones.isEmpty ? nil : milestones.sorted()
+        result.sharedLearning = SharedLearningMerge.combine(local.sharedLearning, remote.sharedLearning)
         if (remote.profileUpdatedAt ?? .distantPast) > (local.profileUpdatedAt ?? .distantPast)
             || (local.profile == nil && remote.profile != nil) {
             result.profile = remote.profile
@@ -176,6 +202,18 @@ enum LearningMerge {
             result.dailyWordGoal = remote.dailyWordGoal
             result.profileUpdatedAt = remote.profileUpdatedAt
         }
+        let allContextEvents = ((local.contextEvidence ?? []) + (remote.contextEvidence ?? [])).filter(\.isValid).map { event in
+            SharedLearningMerge.applyingExposure(to: event, shared: result.sharedLearning)
+        }
+        let groupedContextEvents = Dictionary(grouping: allContextEvents, by: { $0.id.lowercased() })
+        var contextEvents: [String: ContextEvidence] = [:]
+        for (id, events) in groupedContextEvents {
+            guard let first = events.first,
+                  events.allSatisfy({ $0.wordId == first.wordId && $0.roleId == first.roleId && $0.senseId == first.senseId && $0.kind == first.kind && $0.date == first.date }) else { continue }
+            contextEvents[id] = events.dropFirst().reduce(first, ContextEvidence.conservative)
+        }
+        result.contextIntroducedOn = (local.contextIntroducedOn ?? [:]).merging(remote.contextIntroducedOn ?? [:]) { min($0, $1) }
+        result.contextEvidence = contextEvents.isEmpty ? nil : contextEvents.values.sorted { $0.recordedAt == $1.recordedAt ? $0.id < $1.id : $0.recordedAt < $1.recordedAt }
         result.introducedWordIds = Array(Set(local.introducedWordIds + remote.introducedWordIds)).sorted()
         var placements = local.pathPlacements ?? [:]
         for (roleId, incoming) in remote.pathPlacements ?? [:] {
@@ -188,6 +226,14 @@ enum LearningMerge {
             } else { placements[roleId] = incoming }
         }
         result.pathPlacements = placements.isEmpty ? nil : placements
+        let exposedRecallKeys = Set(allContextEvents.filter { event in
+            event.kind == .unaidedRecall && !event.independent && ((local.contextEvidence ?? []) + (remote.contextEvidence ?? [])).contains { $0.id.lowercased() == event.id.lowercased() && $0.independent }
+        }.map { "\($0.date):\($0.wordId)" })
+        func safeActivity(_ event: LearningActivity) -> LearningActivity {
+            guard event.kind == .review, exposedRecallKeys.contains("\(event.dayKey):\(event.wordId ?? "")") else { return event }
+            return .init(id: event.id, kind: event.kind, wordId: event.wordId, date: event.date, dayKey: event.dayKey,
+                         quality: min(1, event.quality), productive: false)
+        }
         var events = Dictionary((local.activities ?? []).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         for event in remote.activities ?? [] { events[event.id] = event }
         result.activities = events.values.sorted { $0.date == $1.date ? $0.id.uuidString < $1.id.uuidString : $0.date < $1.date }
@@ -216,7 +262,7 @@ enum LearningMerge {
             result.progressByWordId[id] = progress
         }
         for (id, original) in result.progressByWordId {
-            let reviews = (result.activities ?? []).filter { $0.kind == .review && $0.wordId == id }
+            let reviews = (result.activities ?? []).filter { $0.kind == .review && $0.wordId == id }.map(safeActivity)
             guard !reviews.isEmpty else { continue }
             // One review per local calendar day. Conflicting same-day answers choose the harder result.
             let byDay = Dictionary(reviews.map { ($0.dayKey, $0) }, uniquingKeysWith: { left, right in
@@ -260,7 +306,11 @@ enum LearningMerge {
             : chosenPlan.completedWordIdsToday
         var plans = local.dailyRolePlans ?? [:]
         for (roleId, plan) in remote.dailyRolePlans ?? [:] {
-            if plans[roleId] == nil || plan.dayKey > plans[roleId]!.dayKey { plans[roleId] = plan }
+            if let own = plans[roleId], own.dayKey == plan.dayKey, own.wordIds == plan.wordIds {
+                var combined = own
+                combined.completedWordIds = Array(Set((own.completedWordIds ?? []) + (plan.completedWordIds ?? []))).sorted()
+                plans[roleId] = combined
+            } else if plans[roleId] == nil || plan.dayKey > plans[roleId]!.dayKey { plans[roleId] = plan }
         }
         // Cloud v2 has no cache fields; recover its active snapshot without discarding
         // the other locally visited roles. Catalogue validation happens in the store.
@@ -268,17 +318,21 @@ enum LearningMerge {
             if let roleId = snapshot.lessonRoleId ?? snapshot.profile?.roleId,
                let day = snapshot.lessonDayKey ?? snapshot.currentLessonDate?.lucidDayKey,
                plans[roleId] == nil || day > plans[roleId]!.dayKey {
-                plans[roleId] = DailyRolePlan(dayKey: day, wordIds: snapshot.currentWordIds)
+                plans[roleId] = DailyRolePlan(dayKey: day, wordIds: snapshot.currentWordIds, completedWordIds: snapshot.dailyRolePlans?[roleId]?.completedWordIds)
             }
         }
         result.dailyRolePlans = plans.isEmpty ? nil : plans
         result.reviewPromptMilestone = max(local.reviewPromptMilestone, remote.reviewPromptMilestone)
-        result.updatedAt = max(local.updatedAt ?? .distantPast, remote.updatedAt ?? .distantPast)
+        let archived = Set((result.historicalMasteredWordIds ?? []) + result.progressByWordId.filter { $0.value.mastered }.map(\.key))
+        result.historicalMasteredWordIds = archived.isEmpty ? nil : archived.sorted()
+        result.updatedAt = [local.updatedAt, remote.updatedAt].compactMap { $0 }.max()
         return result
     }
 
     static func restoringBackup(local: LearnerData, incoming: LearnerData, restoreProfile: Bool) -> LearnerData {
         var result = combine(local: local, remote: incoming)
+        let historical = Set((result.historicalMasteredWordIds ?? []) + (incoming.historicalMasteredWordIds ?? []) + incoming.progressByWordId.filter { $0.value.mastered }.map(\.key))
+        result.historicalMasteredWordIds = historical.isEmpty ? nil : historical.sorted()
         let chosen = restoreProfile || local.profile == nil ? incoming : local
         if chosen.profile != nil {
             result.profile = chosen.profile
@@ -302,6 +356,26 @@ enum LearningMerge {
         result.practiceCursors = (incoming.practiceCursors ?? [:]).merging(local.practiceCursors ?? [:]) { saved, existing in
             saved.dayKey > existing.dayKey ? saved : existing
         }
+        let gaps = Dictionary(((incoming.expressionGaps ?? []) + (local.expressionGaps ?? [])).map { ($0.id, $0) }, uniquingKeysWith: { saved, existing in
+            (existing.lastPractisedAt ?? existing.createdAt) >= (saved.lastPractisedAt ?? saved.createdAt) ? existing : saved
+        })
+        result.expressionGaps = gaps.isEmpty ? nil : gaps.values.sorted { $0.createdAt < $1.createdAt }
+        result.studioDrafts = (incoming.studioDrafts ?? [:]).merging(local.studioDrafts ?? [:]) { saved, existing in existing.isEmpty ? saved : existing }
+        result.contextExposures = (incoming.contextExposures ?? [:]).merging(local.contextExposures ?? [:]) { max($0, $1) }
+        result.rehearsalSessions = (incoming.rehearsalSessions ?? [:]).merging(local.rehearsalSessions ?? [:]) { saved, existing in
+            var chosen = existing.completedAt != nil || (saved.completedAt == nil && existing.checked) ? existing : saved
+            chosen.modelSeen = saved.modelSeen || existing.modelSeen
+            return chosen
+        }
+        result.transferSessions = (incoming.transferSessions ?? [:]).merging(local.transferSessions ?? [:]) { saved, existing in
+            guard saved.roleId == existing.roleId && saved.scenarioIds == existing.scenarioIds else { return existing }
+            var chosen = existing
+            chosen.completedScenarioIds = Array(Set(saved.completedScenarioIds + existing.completedScenarioIds)).sorted()
+            chosen.completedAt = existing.completedAt ?? saved.completedAt
+            return chosen
+        }
+        result.portableWebCompanion = local.portableWebCompanion ?? incoming.portableWebCompanion
+        result.dailyVocabulary = DailyVocabularyEngine.restoringBackup(local: local.dailyVocabulary, incoming: incoming.dailyVocabulary)
         return result
     }
 
@@ -315,7 +389,125 @@ enum LearningMerge {
         result.practiceCursors = nil
         result.lessonRoleId = nil
         result.dailyRolePlans = nil
+        result.contextExposures = nil
+        result.expressionGaps = nil
+        result.rehearsalSessions = nil
+        result.transferSessions = nil
+        result.studioDrafts = nil
+        result.portableWebCompanion = nil
+        result.dailyVocabulary = nil
+        result.historicalMasteredWordIds = nil
+        result.contextEvidence = result.contextEvidence?.filter(\.isValid)
         result.settings = AppSettings()
+        return result
+    }
+}
+
+
+/// Both clients reduce the same immutable records. Raw device-local work is never merged here.
+enum SharedLearningMerge {
+    static func earlier(_ left: String, _ right: String) -> String {
+        guard let a = SharedLearningState.instant(left), let b = SharedLearningState.instant(right) else { return min(left, right) }
+        return a <= b ? left : right
+    }
+    static func later(_ left: String?, _ right: String?) -> String? {
+        guard let left else { return right }; guard let right else { return left }
+        guard let a = SharedLearningState.instant(left), let b = SharedLearningState.instant(right) else { return max(left, right) }
+        return a >= b ? left : right
+    }
+    static func canonical(_ value: StudioJSONValue) -> String {
+        let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        return String(decoding: (try? encoder.encode(value)) ?? Data(), as: UTF8.self)
+    }
+    static func checkpointTie(_ entry: SharedLessonCheckpoint) -> String {
+        let answers = (entry.answers ?? [:]).mapValues { StudioJSONValue.object(["choiceId": .string($0.choiceId), "hinted": .bool($0.hinted)]) }
+        return canonical(.object(["cursorWordId": entry.cursorWordId.map(StudioJSONValue.string) ?? .null, "answers": .object(answers)]))
+    }
+    static func startingTie(_ entry: SharedStartingCheck) -> String {
+        canonical(.object(["questionIds": .array(entry.questionIds.map(StudioJSONValue.string)), "answers": .array(entry.answers.map { .number(Double($0)) })]))
+    }
+    static func applyingExposure(to event: ContextEvidence, shared: SharedLearningState?) -> ContextEvidence {
+        guard event.independent, let seen = shared?.exposures[event.senseId], seen.dayKey == event.date,
+              let first = SharedLearningState.instant(seen.firstSeenAt) else { return event }
+        if let capture = event.capturedAt, capture < first { return event }
+        var conservative = event; conservative.independent = false; conservative.quality = min(1, event.quality)
+        return conservative
+    }
+    static func combine(_ local: SharedLearningState?, _ remote: SharedLearningState?) -> SharedLearningState? {
+        guard let remote, remote.isValid else { return local }
+        guard var result = local, result.isValid else { return remote }
+        for (key, incoming) in remote.lessonCheckpoints {
+            guard let own = result.lessonCheckpoints[key] else { result.lessonCheckpoints[key] = incoming; continue }
+            let ownTime = SharedLearningState.instant(own.updatedAt)!, incomingTime = SharedLearningState.instant(incoming.updatedAt)!
+            if own.wordIds != incoming.wordIds {
+                let ownTie = canonical(.array(own.wordIds.map(StudioJSONValue.string)))
+                let otherTie = canonical(.array(incoming.wordIds.map(StudioJSONValue.string)))
+                result.lessonCheckpoints[key] = ownTime < incomingTime || (ownTime == incomingTime && ownTie <= otherTie) ? own : incoming
+            } else {
+                let incomingIsNewest = incomingTime > ownTime || (incomingTime == ownTime && checkpointTie(incoming) < checkpointTie(own))
+                var chosen = incomingIsNewest ? incoming : own
+                let first = ownTime <= incomingTime ? own : incoming
+                chosen.cursorWordId = chosen.cursorWordId ?? first.cursorWordId
+                chosen.completedWordIds = Array(Set(own.completedWordIds + incoming.completedWordIds)).sorted()
+                var answers = own.answers ?? [:]
+                for (word, answer) in incoming.answers ?? [:] {
+                    if let prior = answers[word] {
+                        let pick = chosen.answers?[word] ?? prior
+                        answers[word] = .init(choiceId: pick.choiceId, hinted: prior.hinted || answer.hinted)
+                    } else { answers[word] = answer }
+                }
+                chosen.answers = answers.isEmpty ? nil : answers
+                result.lessonCheckpoints[key] = chosen
+            }
+        }
+        for (key, incoming) in remote.startingChecks {
+            guard let own = result.startingChecks[key] else { result.startingChecks[key] = incoming; continue }
+            let sameQuestions = own.pathId == incoming.pathId && own.questionIds == incoming.questionIds
+            let isPrefix = Array(own.answers.prefix(min(own.answers.count, incoming.answers.count))) == Array(incoming.answers.prefix(min(own.answers.count, incoming.answers.count)))
+            if sameQuestions && isPrefix { result.startingChecks[key] = incoming.answers.count > own.answers.count ? incoming : own }
+            else {
+                let ownTime = SharedLearningState.instant(own.updatedAt)!, incomingTime = SharedLearningState.instant(incoming.updatedAt)!
+                result.startingChecks[key] = incomingTime < ownTime || (incomingTime == ownTime && startingTie(incoming) < startingTie(own)) ? incoming : own
+            }
+        }
+        for (key, incoming) in remote.notebook {
+            guard let own = result.notebook[key] else { result.notebook[key] = incoming; continue }
+            guard own.id.lowercased() == incoming.id.lowercased(), own.roleId == incoming.roleId,
+                  own.expressionId == incoming.expressionId, own.style == incoming.style, own.phrase == incoming.phrase else { continue }
+            let ownPractice = own.lastPractisedAt.flatMap(SharedLearningState.instant) ?? .distantPast
+            let incomingPractice = incoming.lastPractisedAt.flatMap(SharedLearningState.instant) ?? .distantPast
+            let chosen = SharedNotebookEntry(id: own.id, roleId: own.roleId, expressionId: own.expressionId, style: own.style, phrase: own.phrase,
+                createdAt: earlier(own.createdAt, incoming.createdAt),
+                nextReviewOn: ownPractice == incomingPractice ? min(own.nextReviewOn, incoming.nextReviewOn) : incomingPractice > ownPractice ? incoming.nextReviewOn : own.nextReviewOn,
+                lastPractisedAt: later(own.lastPractisedAt, incoming.lastPractisedAt))
+            result.notebook[key] = chosen
+        }
+        for (key, incoming) in remote.rehearsals {
+            guard let own = result.rehearsals[key] else { result.rehearsals[key] = incoming; continue }
+            guard own.id.lowercased() == incoming.id.lowercased(), own.roleId == incoming.roleId,
+                  own.scenarioId == incoming.scenarioId, own.expressionId == incoming.expressionId,
+                  own.mode == incoming.mode, (own.gapId == nil || incoming.gapId == nil || own.gapId == incoming.gapId) else { continue }
+            var chosen = own; chosen.modelSeen = own.modelSeen || incoming.modelSeen
+            chosen.startedAt = earlier(own.startedAt, incoming.startedAt); chosen.gapId = own.gapId ?? incoming.gapId
+            chosen.completedAt = own.completedAt.flatMap { left in incoming.completedAt.map { earlier(left, $0) } ?? left } ?? incoming.completedAt
+            result.rehearsals[key] = chosen
+        }
+        for (key, incoming) in remote.challenges {
+            guard let own = result.challenges[key] else { result.challenges[key] = incoming; continue }
+            guard own.roleId == incoming.roleId, own.mode == incoming.mode, own.milestone == incoming.milestone,
+                  own.scenarioIds == incoming.scenarioIds else { continue }
+            var chosen = own
+            chosen.startedAt = earlier(own.startedAt, incoming.startedAt)
+            chosen.completedScenarioIds = Array(Set(own.completedScenarioIds + incoming.completedScenarioIds)).sorted()
+            chosen.completedAt = Set(chosen.completedScenarioIds) == Set(chosen.scenarioIds)
+                ? ((own.completedAt.flatMap { left in incoming.completedAt.map { earlier(left, $0) } ?? left } ?? incoming.completedAt) ?? later(own.startedAt, incoming.startedAt)!) : nil
+            result.challenges[key] = chosen
+        }
+        for (key, incoming) in remote.exposures {
+            guard let own = result.exposures[key] else { result.exposures[key] = incoming; continue }
+            result.exposures[key] = incoming.dayKey > own.dayKey ? incoming : own.dayKey > incoming.dayKey ? own
+                : .init(dayKey: own.dayKey, firstSeenAt: earlier(own.firstSeenAt, incoming.firstSeenAt))
+        }
         return result
     }
 }

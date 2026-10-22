@@ -142,7 +142,7 @@ extension LearningStore {
     @discardableResult
     func answerPractice(_ challenge: PracticeChallenge, choiceId: String) -> Bool {
         guard isCurrentChallenge(challenge), !hasUnsavedChanges,
-              !data.completedWordIdsToday.contains(challenge.wordId),
+              !isCurrentRoleWordComplete(challenge.wordId),
               challenge.options.contains(where: { $0.id == choiceId }) else { return false }
         var attempt = tapAttempt(for: challenge) ?? TapPracticeAttempt(signature: challenge.signature)
         guard !attempt.revealed, !attempt.choices.contains(challenge.correctId), attempt.choices.last != choiceId else { return false }
@@ -157,12 +157,14 @@ extension LearningStore {
 
     @discardableResult
     func revealPractice(_ challenge: PracticeChallenge) -> Bool {
-        guard isCurrentChallenge(challenge), !hasUnsavedChanges, !data.completedWordIdsToday.contains(challenge.wordId) else { return false }
+        guard isCurrentChallenge(challenge), !hasUnsavedChanges, !isCurrentRoleWordComplete(challenge.wordId) else { return false }
         var attempt = tapAttempt(for: challenge) ?? TapPracticeAttempt(signature: challenge.signature)
         guard !attempt.revealed else { return false }
         attempt.revealed = true
         var attempts = data.tapPracticeAttempts ?? [:]; attempts[challenge.key] = attempt
-        data.tapPracticeAttempts = attempts
+        var next = data; next.tapPracticeAttempts = attempts
+        markContextExposure(wordId: challenge.wordId, in: &next, at: clock())
+        data = next
         // Revealing alone does not award credit. Continue explicitly completes guided learning.
         return !hasUnsavedChanges
     }
@@ -170,7 +172,7 @@ extension LearningStore {
     @discardableResult
     func continuePractice(_ challenge: PracticeChallenge) -> Bool {
         guard isCurrentChallenge(challenge), !hasUnsavedChanges else { return false }
-        if data.completedWordIdsToday.contains(challenge.wordId) { return true }
+        if isCurrentRoleWordComplete(challenge.wordId) { return true }
         guard tapAttempt(for: challenge)?.revealed == true else { return false }
         var next = data
         introduceGuidedWord(challenge.wordId, in: &next)
@@ -179,20 +181,25 @@ extension LearningStore {
     }
 
     private func introduceGuidedWord(_ wordId: String, in next: inout LearnerData) {
-        guard !next.completedWordIdsToday.contains(wordId) else { return }
+        guard !rolePracticeIsComplete(wordId: wordId, roleId: next.profile?.roleId ?? "", record: next) else { return }
         let now = clock()
         if !next.introducedWordIds.contains(wordId) { next.introducedWordIds.append(wordId) }
         next.progressByWordId[wordId] = next.progressByWordId[wordId]
             ?? WordProgress(introducedOn: now, nextReviewOn: now.lucidAdding(days: 1))
-        next.completedWordIdsToday.append(wordId)
-        next.activities = (next.activities ?? []) + [LearningActivity(id: UUID(), kind: .practice, wordId: wordId,
-                          date: now, dayKey: now.lucidDayKey, quality: 2, productive: false)]
+        if !next.completedWordIdsToday.contains(wordId) { next.completedWordIdsToday.append(wordId) }
+        markRolePracticeComplete(wordId: wordId, in: &next, at: now)
+        if !(next.activities ?? []).contains(where: { $0.kind == .practice && $0.wordId == wordId && $0.dayKey == now.lucidDayKey }) {
+            next.activities = (next.activities ?? []) + [LearningActivity(id: UUID(), kind: .practice, wordId: wordId,
+                              date: now, dayKey: now.lucidDayKey, quality: 2, productive: false)]
+        }
+        appendContextEvidence(to: &next, wordId: wordId, kind: .recognition, quality: 2, independent: false, at: now)
+        markContextExposure(wordId: wordId, in: &next, at: now)
     }
 
     var practiceResumeWordId: String? {
         if let role = profile?.roleId, let cursor = data.practiceCursors?[role], cursor.dayKey == data.lessonDayKey,
-           data.currentWordIds.contains(cursor.wordId), !data.completedWordIdsToday.contains(cursor.wordId) { return cursor.wordId }
-        return data.currentWordIds.first { !data.completedWordIdsToday.contains($0) } ?? data.currentWordIds.first
+           data.currentWordIds.contains(cursor.wordId), !isCurrentRoleWordComplete(cursor.wordId) { return cursor.wordId }
+        return data.currentWordIds.first { !isCurrentRoleWordComplete($0) } ?? data.currentWordIds.first
     }
 
     @discardableResult

@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { headers } from "next/headers";
 import "./globals.css";
+import "./pwa.css";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -23,10 +24,16 @@ export async function generateMetadata(): Promise<Metadata> {
   return {
     title,
     description,
+    manifest: "/manifest.webmanifest",
+    applicationName: "Lucid",
+    appleWebApp: { capable: true, title: "Lucid", statusBarStyle: "default" },
+    icons: { icon: "/icons/lucid-192.png", apple: "/icons/apple-touch-icon.png" },
     openGraph: { title, description, images: [{ url: image, width: 1536, height: 1024, alt: "Lucid — professional vocabulary you can use at work." }] },
     twitter: { card: "summary_large_image", title, description, images: [image] },
   };
 }
+
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#062124" };
 
 export default function RootLayout({
   children,

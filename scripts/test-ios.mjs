@@ -5,14 +5,17 @@ import { spawnSync } from "node:child_process";
 
 const directory = await mkdtemp(join(tmpdir(), "lucid-native-tests-"));
 try {
-  for (const suite of ["learning", "path", "course", "tap-practice", "auth-protocol", "auth-recovery", "learning-qa", "auth-qa", "role-switch", "role-switch-edge", "review-navigation", "library"]) {
+  for (const suite of ["learning", "path", "course", "tap-practice", "auth-protocol", "auth-recovery", "learning-qa", "auth-qa", "role-switch", "role-switch-edge", "review-navigation", "library", "expression-studio", "shared-sync", "daily-vocabulary", "localization"]) {
   const executable = join(directory, `${suite}-tests`);
   const build = spawnSync("xcrun", [
-    "swiftc", "-parse-as-library",
+    "swiftc", "-parse-as-library", "-module-cache-path", join(directory, "module-cache"),
     "ios/Lucid/Lucid/Models.swift", "ios/Lucid/Lucid/LearningPersistence.swift",
     "ios/Lucid/Lucid/LearningStore.swift", "ios/Lucid/Lucid/AccountService.swift",
     "ios/Lucid/Lucid/LocalBackup.swift",
     "ios/Lucid/Lucid/PracticeChallenges.swift",
+    "ios/Lucid/Lucid/ExpressionStudio.swift",
+    "ios/Lucid/Lucid/DailyVocabulary.swift",
+    "ios/Lucid/Lucid/LearningLanguage.swift",
     `tests/native-${suite}-tests.swift`, "-o", executable,
   ], { stdio: "inherit" });
   if (build.status !== 0) { process.exitCode = build.status ?? 1; break; }

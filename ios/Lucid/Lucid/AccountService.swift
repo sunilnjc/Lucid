@@ -159,7 +159,7 @@ final class AccountService {
         do {
             let records = try JSONDecoder().decode([CloudLearningRecord].self, from: data)
             guard records.count <= 1,
-                  records.allSatisfy({ $0.revision >= 0 && $0.state.schemaVersion == 2 }) else {
+                  records.allSatisfy({ $0.revision >= 0 && $0.state.schemaVersion == 2 && ($0.state.sharedLearning?.isValidForCloud() ?? true) && ($0.state.contextEvidence ?? []).allSatisfy { $0.isValid && $0.recordedAt <= Date().addingTimeInterval(300) } }) else {
                 // An older app must never down-convert and upload a newer cloud schema.
                 throw AccountError.response
             }
@@ -256,6 +256,9 @@ extension LearningStore {
             // Same-account reauthentication must include memory-only work that could not
             // be saved yet (for example when the device was temporarily out of space).
             var next = try reconnectingCurrentAccount ? data : persistence.load(scope: newScope).data
+            // Migrate the confirmed account's own native checkpoints before a
+            // consented guest merge; existing account work owns its active card.
+            next.sharedLearning = projectSharedLearning(next, at: clock())
             var restoreNotice: String?
             do {
                 if let cloud = try await accountService.fetch(verified) {
@@ -300,6 +303,8 @@ extension LearningStore {
                 next.practiceCursors = (data.practiceCursors ?? [:]).merging(next.practiceCursors ?? [:]) { guest, account in
                     guest.dayKey > account.dayKey ? guest : account
                 }
+                // Explicit consent includes this device-private sidecar; ordinary account changes never do.
+                next.dailyVocabulary = DailyVocabularyEngine.restoringBackup(local: next.dailyVocabulary, incoming: data.dailyVocabulary)
             }
             next = normalizedDailyPlan(next, at: clock())
             try persistence.save(next, scope: newScope)
@@ -341,6 +346,42 @@ extension LearningStore {
     }
 
     func syncNow() async {
+        // Polling can observe peer changes without rewriting an unchanged cloud row.
+        // Device preferences, private text and equivalent logical-day timestamps do
+        // not constitute a progress change.
+        func equivalentCloud(_ left: LearnerData, _ right: LearnerData) -> Bool {
+            func normal(_ value: Any, key: String = "") -> Any {
+                if let object = value as? [String: Any] {
+                    var result: [String: Any] = [:]
+                    for (name, item) in object {
+                        let normalized = normal(item, key: name)
+                        if let values = normalized as? [Any], values.isEmpty { continue }
+                        if let values = normalized as? [String: Any], values.isEmpty { continue }
+                        result[name] = normalized
+                    }
+                    return result
+                }
+                if let array = value as? [Any] {
+                    let values = array.map { normal($0) }
+                    if ["activities", "sessions", "contextEvidence"].contains(key) {
+                        return values.sorted { (($0 as? [String: Any])?["id"] as? String ?? "") < (($1 as? [String: Any])?["id"] as? String ?? "") }
+                    }
+                    if ["introducedWordIds", "favouriteWordIds", "completedWordIdsToday", "completedWordIds", "completedScenarioIds"].contains(key), let strings = values as? [String] { return strings.sorted() }
+                    return values
+                }
+                if key.hasSuffix("At"), let text = value as? String, let date = SharedLearningState.instant(text) { return date.timeIntervalSince1970 }
+                return value
+            }
+            guard var a = (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(LearningMerge.cloudRecord(left)))) as? [String: Any],
+                  var b = (try? JSONSerialization.jsonObject(with: JSONEncoder().encode(LearningMerge.cloudRecord(right)))) as? [String: Any] else { return false }
+            for key in ["settings", "updatedAt"] { a.removeValue(forKey: key); b.removeValue(forKey: key) }
+            if let day = a["lessonDayKey"] as? String, day == b["lessonDayKey"] as? String {
+                a.removeValue(forKey: "currentLessonDate"); b.removeValue(forKey: "currentLessonDate")
+            }
+            let lhs = try? JSONSerialization.data(withJSONObject: normal(a), options: [.sortedKeys])
+            let rhs = try? JSONSerialization.data(withJSONObject: normal(b), options: [.sortedKeys])
+            return lhs != nil && lhs == rhs
+        }
         guard !accountBusy, !storageBlocked, !needsAccountVerification, let accountService, var current = session else { return }
         if isSyncing { syncAgain = true; return }
         isSyncing = true
@@ -380,11 +421,24 @@ extension LearningStore {
                     prepareToday()
                     merged = data
                 }
+                if let remote, equivalentCloud(merged, remote.state) {
+                    try persistence.save(merged, scope: scope)
+                    isApplyingRemote = true; data = merged; isApplyingRemote = false
+                    if hasUnsavedChanges { storageNotice = nil }
+                    hasUnsavedChanges = false; accountNotice = nil
+                    lastSyncedAt = clock(); currentDate = clock(); syncStatus = "Progress synced"
+                    return
+                }
                 let revisionBeforeUpload = dataRevision
                 do {
                     try await accountService.save(merged, revision: remote?.revision ?? 0, session: current)
                     guard generation == accountGeneration else { return }
-                    let combined = dataRevision == revisionBeforeUpload ? merged : LearningMerge.combine(local: data, remote: merged)
+                    // Server reductions are authoritative. Observe the actual accepted
+                    // row before claiming sync, preserving any edits made during this read.
+                    guard let confirmed = try await accountService.fetch(current) else { throw AccountError.response }
+                    guard generation == accountGeneration else { return }
+                    let live = dataRevision == revisionBeforeUpload ? merged : LearningMerge.combine(local: data, remote: merged)
+                    let combined = LearningMerge.combine(local: live, remote: confirmed.state)
                     let final = normalizedDailyPlan(combined, at: clock())
                     try persistence.save(final, scope: scope)
                     if hasUnsavedChanges { storageNotice = nil }
@@ -394,7 +448,7 @@ extension LearningStore {
                     data = final
                     isApplyingRemote = false
                     currentDate = clock()
-                    if dataRevision != revisionBeforeUpload || final != merged { syncAgain = true }
+                    if !equivalentCloud(final, confirmed.state) { syncAgain = true }
                     lastSyncedAt = clock()
                     syncStatus = "Progress synced"
                     return
@@ -519,3 +573,24 @@ extension LearningStore {
         return AccountError.server.localizedDescription
     }
 }
+
+
+#if DEBUG && targetEnvironment(simulator)
+/// A separately bundled simulator test can talk to its disposable loopback provider.
+/// This path cannot run in the shipping bundle, Release, a phone, or against a hosted service.
+private final class SharedAccountQAVault { var session: AccountSession? }
+struct SharedAccountQARuntime {
+    let service: AccountService
+    let storage: AccountSessionStorage
+    static func configured() -> Self? {
+        guard Bundle.main.bundleIdentifier == "com.sunilnjc.lucid.uiqa",
+              let text = ProcessInfo.processInfo.environment["LUCID_UIQA_SHARED_BACKEND"],
+              let url = URL(string: text), url.scheme == "http",
+              ["localhost", "127.0.0.1", "::1", "[::1]"].contains(url.host ?? ""),
+              let port = url.port, (1024...65535).contains(port), url.user == nil, url.password == nil else { return nil }
+        let key = ProcessInfo.processInfo.environment["LUCID_UIQA_PUBLIC_KEY"] ?? "lucid-uiqa-synthetic-public-key"
+        let vault = SharedAccountQAVault()
+        return .init(service: AccountService(baseURL: url, publicKey: key), storage: .init(load: { vault.session }, save: { vault.session = $0 }, clear: { vault.session = nil }))
+    }
+}
+#endif

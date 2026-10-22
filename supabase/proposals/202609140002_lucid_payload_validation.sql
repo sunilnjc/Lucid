@@ -21,7 +21,12 @@ begin
   case shape
     when 'identifier' then
       return coalesce(jsonb_typeof(v) = 'string' and length(v #>> '{}') between 1 and 128
-        and (v #>> '{}') ~ '^[A-Za-z0-9][A-Za-z0-9_-]*$', false);
+        and (v #>> '{}') ~ '^[A-Za-z0-9][A-Za-z0-9:_-]*$', false);
+    when 'sense-id' then
+      return coalesce(jsonb_typeof(v) = 'string' and length(v #>> '{}') between 1 and 256
+        and (v #>> '{}') ~ '^[A-Za-z0-9][A-Za-z0-9:_-]*$', false);
+    when 'evidence-kind' then
+      return coalesce(v in ('"recognition"'::jsonb, '"unaided-recall"'::jsonb, '"self-assessed-production"'::jsonb), false);
     when 'uuid' then
       return coalesce(jsonb_typeof(v) = 'string'
         and (v #>> '{}') ~ '^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$', false);
@@ -52,22 +57,27 @@ begin
       exception when datetime_field_overflow then return false;
       end;
     when 'kind' then return coalesce(v in ('"practice"'::jsonb, '"review"'::jsonb, '"lesson"'::jsonb), false);
-    when 'ids', 'dates', 'events', 'sessions' then
+    when 'ids', 'dates', 'events', 'sessions', 'context-evidence-list' then
       if jsonb_typeof(v) is distinct from 'array' then return false; end if;
       child_shape := case shape when 'ids' then 'identifier' when 'dates' then 'date'
-                        when 'events' then 'event' else 'session' end;
+                        when 'events' then 'event' when 'context-evidence-list' then 'context-evidence' else 'session' end;
       for child in select value from jsonb_array_elements(v) loop
         if not public.lucid_v2_value_valid(child, child_shape) then return false; end if;
       end loop;
       return true;
-    when 'progress-map', 'favourite-map' then
+    when 'progress-map', 'favourite-map', 'placement-map', 'context-date-map' then
       if jsonb_typeof(v) is distinct from 'object' then return false; end if;
-      child_shape := case shape when 'progress-map' then 'progress' else 'favourite' end;
+      child_shape := case shape when 'progress-map' then 'progress' when 'placement-map' then 'placement' when 'context-date-map' then 'date' else 'favourite' end;
       for key, child in select * from jsonb_each(v) loop
-        if not public.lucid_v2_value_valid(to_jsonb(key), 'identifier')
+        if not public.lucid_v2_value_valid(to_jsonb(key), case when shape = 'context-date-map' then 'sense-id' else 'identifier' end)
            or not public.lucid_v2_value_valid(child, child_shape) then return false; end if;
       end loop;
       return true;
+    when 'placement' then
+      required_keys := array['pathId', 'startingModuleId', 'checkedAt', 'correctAnswers', 'questionCount'];
+    when 'context-evidence' then
+      required_keys := array['id', 'wordId', 'roleId', 'senseId', 'date', 'recordedAt', 'kind', 'quality', 'independent'];
+      optional_keys := array['capturedAt'];
     when 'profile' then
       required_keys := array['roleId', 'seniorityId', 'situationIds', 'goalIds'];
     when 'progress' then
@@ -88,7 +98,7 @@ begin
         'progressByWordId', 'sessions', 'favouriteWordIds', 'completedWordIdsToday',
         'settings', 'reviewPromptMilestone'];
       optional_keys := array['displayName', 'dailyWordGoal', 'profileUpdatedAt', 'lessonDayKey',
-        'activities', 'favouriteChanges', 'updatedAt', 'profile', 'currentLessonDate'];
+        'activities', 'favouriteChanges', 'updatedAt', 'profile', 'currentLessonDate', 'pathPlacements', 'contextEvidence', 'contextIntroducedOn'];
     else return false;
   end case;
 
@@ -102,19 +112,24 @@ begin
       when 'situationIds' then 'ids' when 'goalIds' then 'ids' when 'wordIds' then 'ids'
       when 'introducedWordIds' then 'ids' when 'currentWordIds' then 'ids'
       when 'favouriteWordIds' then 'ids' when 'completedWordIdsToday' then 'ids'
-      when 'id' then 'uuid' when 'kind' then 'kind'
-      when 'date' then 'date' when 'completedAt' then 'date' when 'introducedOn' then 'date'
+      when 'id' then 'uuid' when 'kind' then case when shape = 'context-evidence' then 'evidence-kind' else 'kind' end
+      when 'date' then case when shape = 'context-evidence' then 'day' else 'date' end when 'completedAt' then 'date' when 'introducedOn' then 'date'
       when 'nextReviewOn' then 'date' when 'lastReviewedOn' then 'date'
+      when 'recordedAt' then 'date' when 'capturedAt' then 'date' when 'checkedAt' then 'date'
+      when 'pathId' then 'identifier' when 'startingModuleId' then 'identifier' when 'senseId' then 'sense-id'
+      when 'correctAnswers' then 'integer' when 'questionCount' then 'integer'
       when 'profileUpdatedAt' then 'date' when 'updatedAt' then 'date' when 'currentLessonDate' then 'date'
       when 'dayKey' then 'day' when 'lessonDayKey' then 'day'
       when 'intervalIndex' then 'interval'
       when 'reviewCount' then 'integer' when 'lapses' then 'integer' when 'reviewPromptMilestone' then 'integer'
       when 'successfulReviewDates' then 'dates'
       when 'mastered' then 'boolean' when 'productive' then 'boolean'
-      when 'selected' then 'boolean' when 'notificationsEnabled' then 'boolean'
+      when 'independent' then 'boolean' when 'selected' then 'boolean' when 'notificationsEnabled' then 'boolean'
       when 'quality' then 'quality' when 'dailyWordGoal' then 'pace'
       when 'displayName' then 'name'
       when 'profile' then 'profile' when 'settings' then 'settings'
+      when 'contextIntroducedOn' then 'context-date-map'
+      when 'pathPlacements' then 'placement-map' when 'contextEvidence' then 'context-evidence-list'
       when 'progressByWordId' then 'progress-map' when 'favouriteChanges' then 'favourite-map'
       when 'sessions' then 'sessions' when 'activities' then 'events'
       else null end;
@@ -134,6 +149,11 @@ begin
 
   if shape = 'profile' then
     if jsonb_array_length(v->'situationIds') = 0 or jsonb_array_length(v->'goalIds') = 0 then return false; end if;
+  elsif shape = 'placement' then
+    if v->'questionCount' <> '6'::jsonb or v->'correctAnswers' > v->'questionCount' then return false; end if;
+  elsif shape = 'context-evidence' then
+    if v->>'senseId' <> (v->>'wordId') || '::' || (v->>'roleId') then return false; end if;
+    if v->>'kind' = 'recognition' and v->'independent' <> 'false'::jsonb then return false; end if;
   elsif shape = 'state' then
     if jsonb_array_length(v->'currentWordIds') > 3 then return false; end if;
   elsif shape = 'event' then
@@ -160,6 +180,10 @@ declare
   event jsonb;
   merged_events jsonb;
   safe_state jsonb;
+  previous_state jsonb;
+  merged_context_evidence jsonb;
+  merged_placements jsonb;
+  merged_context_dates jsonb;
 begin
   if actor is null or not exists (select 1 from auth.users where id = actor) then
     raise sqlstate 'PT401' using message = 'Sign in required';
@@ -172,7 +196,7 @@ begin
     raise sqlstate 'PT400' using message = 'Unsupported learning record';
   end if;
   insert into public.lucid_state(user_id) values (actor) on conflict do nothing;
-  select revision into actual_revision from public.lucid_state where user_id = actor for update;
+  select revision, state into actual_revision, previous_state from public.lucid_state where user_id = actor for update;
   if actual_revision <> expected_revision then
     raise sqlstate 'PT409' using message = 'Learning record changed; merge and retry';
   end if;
@@ -185,6 +209,34 @@ begin
   select coalesce(jsonb_agg(payload order by payload->'date', event_id), '[]'::jsonb)
     into merged_events from public.lucid_activity where user_id = actor;
   safe_state := jsonb_set(new_state, '{activities}', merged_events);
+  -- An older v2 client may omit newly introduced metadata. Retain it on the server
+  -- rather than letting that client's upload erase contextual recall or placements.
+  select coalesce(jsonb_agg(payload order by payload->'recordedAt', payload->>'id'), '[]'::jsonb)
+    into merged_context_evidence from (
+      select distinct on (payload->>'id') payload from (
+        select value as payload, 0 as priority from jsonb_array_elements(coalesce(nullif(previous_state->'contextEvidence', 'null'::jsonb), '[]'::jsonb))
+        union all
+        select value as payload, 1 as priority from jsonb_array_elements(coalesce(nullif(new_state->'contextEvidence', 'null'::jsonb), '[]'::jsonb))
+      ) all_evidence order by payload->>'id', priority
+    ) immutable_evidence;
+  select coalesce(jsonb_object_agg(role_id, placement), '{}'::jsonb) into merged_placements from (
+    select distinct on (role_id) role_id, placement from (
+      select key as role_id, value as placement from jsonb_each(coalesce(nullif(previous_state->'pathPlacements', 'null'::jsonb), '{}'::jsonb))
+      union all
+      select key as role_id, value as placement from jsonb_each(coalesce(nullif(new_state->'pathPlacements', 'null'::jsonb), '{}'::jsonb))
+    ) all_placements order by role_id, placement->'checkedAt' desc, placement::text
+  ) latest_placements;
+  safe_state := jsonb_set(jsonb_set(safe_state, '{contextEvidence}', merged_context_evidence), '{pathPlacements}', merged_placements);
+  select coalesce(jsonb_object_agg(sense_id, introduced_at), '{}'::jsonb) into merged_context_dates from (
+    select distinct on (sense_id) sense_id, introduced_at from (
+      select key as sense_id, value as introduced_at from jsonb_each(coalesce(nullif(previous_state->'contextIntroducedOn', 'null'::jsonb), '{}'::jsonb))
+      union all
+      select key as sense_id, value as introduced_at from jsonb_each(coalesce(nullif(new_state->'contextIntroducedOn', 'null'::jsonb), '{}'::jsonb))
+    ) all_context_dates order by sense_id, introduced_at asc
+  ) first_context_dates;
+  safe_state := jsonb_set(safe_state, '{contextIntroducedOn}', merged_context_dates);
+
+
   -- Notification and playback preferences stay on the device, even if a modified
   -- client accidentally sends them. The native merge already preserves local settings.
   safe_state := jsonb_set(safe_state, '{settings}',

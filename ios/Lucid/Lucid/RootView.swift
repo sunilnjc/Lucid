@@ -2,6 +2,7 @@ import StoreKit
 import SwiftUI
 
 struct RootView: View {
+    @AppStorage(LearningLanguage.preferenceKey) private var learningLanguageCode = "en"
     @EnvironmentObject private var store: LearningStore
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -16,42 +17,42 @@ struct RootView: View {
                 ScrollView {
                 VStack(spacing: 24) {
                     Image(systemName: "externaldrive.badge.exclamationmark").font(.largeTitle)
-                    Text("Let’s recover your progress.").font(.title)
-                    Text(store.catalogError ?? store.storageNotice ?? "Your saved data needs attention.")
+                    Text(learningText("Let’s recover your progress.")).font(.title)
+                    Text(store.catalogError ?? store.storageNotice ?? learningText("Your saved data needs attention."))
                     if store.catalogError == nil {
-                        Button("Retry storage") { store.retryStorage() }.buttonStyle(.borderedProminent)
+                        Button(learningText("Retry storage")) { store.retryStorage() }.buttonStyle(.borderedProminent)
                     } else {
-                        Text("Please install the latest Lucid update. If the catalogue still cannot load, contact support.")
+                        Text(learningText("Please install the latest Lucid update. If the catalogue still cannot load, contact support."))
                             .foregroundStyle(LucidColour.secondaryOnDark)
                     }
                     if store.catalogError == nil && !store.storageNeedsUpdate && store.session == nil {
-                        Button("Restore a saved backup") { confirmRecoveryRestore = true }
+                        Button(learningText("Restore a saved backup")) { confirmRecoveryRestore = true }
                     }
-                    Link("Contact support", destination: URL(string: "https://lucid-vocabulary-sunil.sunilkumar-kalabandi.chatgpt.site/support")!)
+                    Link(learningText("Contact support"), destination: URL(string: "https://lucid-vocabulary-sunil.sunilkumar-kalabandi.chatgpt.site/support")!)
                 }.padding(28).foregroundStyle(LucidColour.textOnDark)
                 }
             } else if store.cloudRestorePending && store.profile == nil {
                 ScrollView {
                 VStack(spacing: 20) {
                     Image(systemName: "icloud.and.arrow.down").font(.largeTitle).foregroundStyle(LucidColour.mint)
-                    Text("Your learning is worth waiting for.").font(.title2.bold())
-                    Text("We haven’t finished restoring your account. Connect to the internet and retry so your existing plan stays safe.")
+                    Text(learningText("Your learning is worth waiting for.")).font(.title2.bold())
+                    Text(learningText("We haven’t finished restoring your account. Connect to the internet and retry so your existing plan stays safe."))
                         .foregroundStyle(LucidColour.secondaryOnDark)
                     if let notice = store.accountNotice { Text(notice).font(.footnote) }
-                    if store.isSyncing { ProgressView("Restoring your progress…") }
+                    if store.isSyncing { ProgressView(learningText("Restoring your progress…")) }
                     if store.needsAccountVerification {
-                        Button("Verify email to reconnect") { showAccount = true }
+                        Button(learningText("Verify email to reconnect")) { showAccount = true }
                             .buttonStyle(.borderedProminent)
                             .disabled(store.accountService?.emailDeliveryReady != true || store.accountBusy)
                         if store.accountService?.emailDeliveryReady != true {
-                            Text("Email sign-in is not ready in this build. Update Lucid to reconnect; your cached progress is kept safely.")
+                            Text(learningText("Email sign-in is not ready in this build. Update Lucid to reconnect; your cached progress is kept safely."))
                                 .font(.footnote)
                         }
                     } else {
-                        Button("Retry restore") { Task { await store.syncNow() } }
+                        Button(learningText("Retry restore")) { Task { await store.syncNow() } }
                             .buttonStyle(.borderedProminent).disabled(store.isSyncing || store.accountBusy)
                     }
-                    Button("Sign out and use guest mode") { Task { await store.signOut() } }
+                    Button(learningText("Sign out and use guest mode")) { Task { await store.signOut() } }
                         .disabled(store.accountBusy || store.isSyncing)
                 }.padding(28).multilineTextAlignment(.center).foregroundStyle(LucidColour.textOnDark)
                 }
@@ -74,26 +75,38 @@ struct RootView: View {
             }
         }
         .lucidBackground()
+        .environment(\.locale, LearningLanguage(preference: learningLanguageCode).locale)
         .preferredColorScheme(.dark)
         .sheet(isPresented: $showAccount) { AccountView() }
-        .confirmationDialog("Recover from a saved backup?", isPresented: $confirmRecoveryRestore, titleVisibility: .visible) {
-            Button("Choose a Lucid backup") { showBackupImporter = true }
-            Button("Cancel", role: .cancel) {}
+        .confirmationDialog(learningText("Recover from a saved backup?"), isPresented: $confirmRecoveryRestore, titleVisibility: .visible) {
+            Button(learningText("Choose a Lucid backup")) { showBackupImporter = true }
+            Button(learningText("Cancel"), role: .cancel) {}
         } message: {
-            Text("Lucid will keep a protected copy of the unreadable files, then restore the backup you choose. Changes made after that backup may not be recoverable.")
+            Text(learningText("Lucid will keep a protected copy of the unreadable files, then restore the backup you choose. Changes made after that backup may not be recoverable."))
         }
         .fileImporter(isPresented: $showBackupImporter, allowedContentTypes: [.json]) { result in
             do {
                 try store.importBackup(from: result.get(), restoreProfile: true)
                 if store.profile != nil { store.openToday() }
             } catch {
-                backupError = "Choose a valid Lucid backup. Your current progress has not changed."
+                backupError = learningText("Choose a valid Lucid backup. Your current progress has not changed.")
             }
         }
-        .alert("Backup could not be restored", isPresented: Binding(get: { backupError != nil }, set: { if !$0 { backupError = nil } })) {
+        .alert(learningText("Backup could not be restored"), isPresented: Binding(get: { backupError != nil }, set: { if !$0 { backupError = nil } })) {
             Button("OK", role: .cancel) { backupError = nil }
         } message: { Text(backupError ?? "") }
         .task { store.refreshDay(); await store.syncNow() }
+        .task(id: scenePhase) {
+            guard scenePhase == .active, store.accountService != nil else { return }
+            while !Task.isCancelled {
+                do { try await Task.sleep(nanoseconds: 20_000_000_000) } catch { return }
+                guard !Task.isCancelled, scenePhase == .active else { return }
+                if store.session != nil {
+                    store.refreshDay()
+                    await store.syncNow()
+                }
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 store.refreshDay()
@@ -109,6 +122,7 @@ struct RootView: View {
 }
 
 struct WelcomeView: View {
+    @AppStorage(LearningLanguage.preferenceKey) private var learningLanguageCode = "en"
     @EnvironmentObject private var store: LearningStore
     @State private var showSignOutConfirmation = false
     let hasProfile: Bool
@@ -143,6 +157,8 @@ struct WelcomeView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
                         BrandHeader(onDark: true)
+                        LearningLanguagePicker().padding(.top, 16)
+                        LearningCoverageNote()
 
                         Spacer(minLength: 44)
 
@@ -151,13 +167,13 @@ struct WelcomeView: View {
                             .tracking(1.8)
                             .foregroundStyle(LucidColour.mint)
 
-                        Text(hasProfile ? (store.isCurrentPlanComplete ? "A little practice. A lasting difference." : "Make your next conversation count.") : "Welcome to a sharper workday.")
+                        Text(hasProfile ? (store.isCurrentPlanComplete ? learningText("A little practice. A lasting difference.") : learningText("Make your next conversation count.")) : learningText("Welcome to a sharper workday."))
                             .font(.system(.largeTitle, design: .serif))
                             .foregroundStyle(.white)
                             .lineSpacing(-1)
                             .padding(.top, 14)
 
-                        Text(context.date.formatted(.dateTime.weekday(.wide).day().month(.wide)))
+                        Text(context.date.formatted(.dateTime.weekday(.wide).day().month(.wide).locale(learningLanguage().locale)))
                             .font(.headline)
                             .foregroundStyle(.white.opacity(0.72))
                             .padding(.top, 24)
@@ -172,7 +188,7 @@ struct WelcomeView: View {
 
                         Button(action: continueAction) {
                             HStack(spacing: 14) {
-                                Text(hasProfile ? (store.isCurrentPlanComplete ? "See today’s progress" : "Open today’s practice") : "Personalise my Lucid")
+                                Text(hasProfile ? (store.isCurrentPlanComplete ? learningText("See today’s progress") : learningText("Open today’s practice")) : learningText("Personalise my Lucid"))
                                     .font(.headline)
                                 Spacer()
                                 Image(systemName: "arrow.right")
@@ -184,15 +200,15 @@ struct WelcomeView: View {
                             .background(LucidColour.mint, in: RoundedRectangle(cornerRadius: 18))
                         }
                         .buttonStyle(.plain)
-                        .accessibilityHint(hasProfile ? "Opens today’s vocabulary lesson" : "Opens your professional vocabulary setup")
+                        .accessibilityHint(hasProfile ? learningText("Opens today’s vocabulary lesson") : learningText("Opens your professional vocabulary setup"))
 
                         if store.session == nil && store.accountService?.emailDeliveryReady == true {
-                            Button("Sign in or create an account", action: accountAction)
+                            Button(learningText("Sign in or create an account"), action: accountAction)
                                 .font(.subheadline).foregroundStyle(LucidColour.mint)
                                 .frame(maxWidth: .infinity, minHeight: 48)
                         }
                         if !hasProfile && store.session == nil {
-                            Button("Already learning? Restore a backup", action: restoreAction)
+                            Button(learningText("Already learning? Restore a backup"), action: restoreAction)
                                 .font(.subheadline).foregroundStyle(LucidColour.mint)
                                 .frame(maxWidth: .infinity, minHeight: 48)
                         }
@@ -200,7 +216,7 @@ struct WelcomeView: View {
                             Text("Signed in as \(session.user.email ?? "your Lucid account")")
                                 .font(.footnote).foregroundStyle(LucidColour.secondaryOnDark)
                                 .frame(maxWidth: .infinity).padding(.top, 16)
-                            Button("Sign out or use a different email") { showSignOutConfirmation = true }
+                            Button(learningText("Sign out or use a different email")) { showSignOutConfirmation = true }
                                 .font(.subheadline).foregroundStyle(LucidColour.mint)
                                 .frame(maxWidth: .infinity, minHeight: 48)
                                 .disabled(store.accountBusy || store.isSyncing)
@@ -209,7 +225,7 @@ struct WelcomeView: View {
                                 Text(notice).font(.footnote).foregroundStyle(LucidColour.coral)
                             }
                         }
-                        Text("A few useful words · Built for your role · Your pace")
+                        Text(learningText("A few useful words · Built for your role · Your pace"))
                             .font(.caption)
                             .foregroundStyle(.white.opacity(0.58))
                             .frame(maxWidth: .infinity)
@@ -225,54 +241,55 @@ struct WelcomeView: View {
             }
             .preferredColorScheme(.dark)
         }
-        .confirmationDialog("Sign out of Lucid?", isPresented: $showSignOutConfirmation, titleVisibility: .visible) {
-            Button("Sign out") { Task { await store.signOut() } }
-            Button("Cancel", role: .cancel) {}
+        .confirmationDialog(learningText("Sign out of Lucid?"), isPresented: $showSignOutConfirmation, titleVisibility: .visible) {
+            Button(learningText("Sign out")) { Task { await store.signOut() } }
+            Button(learningText("Cancel"), role: .cancel) {}
         } message: {
-            Text("Your account’s local learning stays separate from guest mode. Sign in to the same email to restore it.")
+            Text(learningText("Your account’s local learning stays separate from guest mode. Sign in to the same email to restore it."))
         }
     }
 
     private func greeting(for date: Date) -> String {
         switch Calendar.current.component(.hour, from: date) {
-        case 5..<12: "Good morning"
-        case 12..<17: "Good afternoon"
-        case 17..<22: "Good evening"
-        default: "Welcome back"
+        case 5..<12: learningText("Good morning")
+        case 12..<17: learningText("Good afternoon")
+        case 17..<22: learningText("Good evening")
+        default: learningText("Welcome back")
         }
     }
 
     private func dayMessage(for date: Date) -> String {
         switch Calendar.current.component(.weekday, from: date) {
-        case 1: "A quiet moment to prepare the language you’ll need this week."
-        case 2: "Start the week with language that helps your ideas move forward."
-        case 3: "Turn today’s conversations into clearer decisions and next steps."
-        case 4: "Build the words that make complex work easier to explain."
-        case 5: "Strengthen the language you need to influence, align, and deliver."
-        case 6: "Finish the week with words worth carrying into the next one."
-        default: "Keep your professional vocabulary active with one focused lesson."
+        case 1: learningText("A quiet moment to prepare the language you’ll need this week.")
+        case 2: learningText("Start the week with language that helps your ideas move forward.")
+        case 3: learningText("Turn today’s conversations into clearer decisions and next steps.")
+        case 4: learningText("Build the words that make complex work easier to explain.")
+        case 5: learningText("Strengthen the language you need to influence, align, and deliver.")
+        case 6: learningText("Finish the week with words worth carrying into the next one.")
+        default: learningText("Keep your professional vocabulary active with one focused lesson.")
         }
     }
 }
 
 struct MainTabView: View {
+    @AppStorage(LearningLanguage.preferenceKey) private var learningLanguageCode = "en"
     @EnvironmentObject private var store: LearningStore
     var body: some View {
         TabView(selection: $store.selectedTab) {
             TodayView()
-                .tabItem { Label("Today", systemImage: "sun.max.fill") }
+                .tabItem { Label(learningText("Today"), systemImage: "sun.max.fill") }
                 .tag(0)
             ReviewView()
-                .tabItem { Label("Review", systemImage: "arrow.triangle.2.circlepath") }
-                .badge(store.visibleReviewWords.count).tag(1)
+                .tabItem { Label(learningText("Review"), systemImage: "arrow.triangle.2.circlepath") }
+                .badge(store.visibleReviewWords.count + store.dueDailyIdioms.count).tag(1)
             LibraryView()
-                .tabItem { Label("Library", systemImage: "books.vertical.fill") }
+                .tabItem { Label(learningText("Library"), systemImage: "books.vertical.fill") }
                 .tag(2)
             InsightsView()
-                .tabItem { Label("Progress", systemImage: "chart.line.uptrend.xyaxis") }
+                .tabItem { Label(learningText("Progress"), systemImage: "chart.line.uptrend.xyaxis") }
                 .tag(3)
             SettingsView()
-                .tabItem { Label("Settings", systemImage: "gearshape.fill") }
+                .tabItem { Label(learningText("Settings"), systemImage: "gearshape.fill") }
                 .tag(4)
         }
         .tint(LucidColour.mint)
@@ -284,6 +301,7 @@ struct MainTabView: View {
 }
 
 struct OnboardingView: View {
+    @AppStorage(LearningLanguage.preferenceKey) private var learningLanguageCode = "en"
     @EnvironmentObject private var store: LearningStore
     @Environment(\.dismiss) private var dismiss
     let catalog: ProfessionalCatalog
@@ -313,10 +331,10 @@ struct OnboardingView: View {
     private var role: ProfessionalRole? { catalog.roles.first { $0.id == roleId } }
     private var canContinue: Bool { !roleId.isEmpty && !seniorityId.isEmpty && !situationIds.isEmpty && !goalIds.isEmpty }
     private var selectionGuidance: String {
-        if situationIds.isEmpty && goalIds.isEmpty { return "Choose at least one daily situation and one communication goal in setup." }
-        if situationIds.isEmpty { return "Choose at least one daily situation in setup." }
-        if goalIds.isEmpty { return "Choose at least one communication goal in setup." }
-        return "Your role, your pace. You can change these later in Settings."
+        if situationIds.isEmpty && goalIds.isEmpty { return learningText("Choose at least one daily situation and one communication goal in setup.") }
+        if situationIds.isEmpty { return learningText("Choose at least one daily situation in setup.") }
+        if goalIds.isEmpty { return learningText("Choose at least one communication goal in setup.") }
+        return learningText("Your role, your pace. You can change these later in Settings.")
     }
 
     var body: some View {
@@ -325,71 +343,73 @@ struct OnboardingView: View {
                 VStack(alignment: .leading, spacing: 28) {
                     PracticeStatusBanner()
                     BrandHeader(onDark: true)
+                        LearningLanguagePicker()
+                        LearningCoverageNote()
 
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("English for the moments that matter at work.")
+                        Text(learningText("English for the moments that matter at work."))
                             .font(.system(.largeTitle, design: .serif, weight: .regular))
                             .foregroundStyle(.white)
-                        Text(editing ? "Change your role to update Today’s words now. Your saved practice, reviews, and progress stay with you." : "Tell Lucid where you work and how you want to communicate. Each lesson will fit your role and your pace.")
+                        Text(editing ? learningText("Change your role to update Today’s words now. Your saved practice, reviews, and progress stay with you.") : learningText("Tell Lucid where you work and how you want to communicate. Each lesson will fit your role and your pace."))
                             .font(.body)
                             .foregroundStyle(.white.opacity(0.72))
                             .lineSpacing(4)
                     }
 
                     VStack(alignment: .leading, spacing: 14) {
-                        TextField("What should we call you? (optional)", text: $name,
-                                  prompt: Text("What should we call you? (optional)").foregroundStyle(LucidColour.secondaryOnDark))
+                        TextField(learningText("What should we call you? (optional)"), text: $name,
+                                  prompt: Text(learningText("What should we call you? (optional)")).foregroundStyle(LucidColour.secondaryOnDark))
                             .textContentType(.givenName).padding(16)
                             .foregroundStyle(LucidColour.textOnDark)
                             .background(LucidColour.midnight, in: RoundedRectangle(cornerRadius: 12))
                             .onChange(of: name) { _, value in name = String(value.prefix(40)) }
-                        Picker("Daily pace", selection: $dailyGoal) {
-                            Text("1 word · 2 min").tag(1)
-                            Text("2 words · 4 min").tag(2)
-                            Text("3 words · 6 min").tag(3)
+                        Picker(learningText("Course practice pace"), selection: $dailyGoal) {
+                            Text(learningText("1 word · 2 min")).tag(1)
+                            Text(learningText("2 words · 4 min")).tag(2)
+                            Text(learningText("3 words · 6 min")).tag(3)
                         }.pickerStyle(.menu).tint(LucidColour.mint)
-                        Text("Start small. You can adjust your pace anytime. Scheduled review is separate.")
+                        Text(learningText("Choose 1–3 course words for focused practice. Daily discovery offers 5 words plus 3 optional, with scheduled review kept separate."))
                             .font(.subheadline).foregroundStyle(LucidColour.secondaryOnDark)
                         if editing {
-                            Text("Already opened a role today? Its cards stay the same when you return. Other preference changes don’t replace an existing daily plan. A new pace starts with the next daily lesson.")
+                            Text(learningText("Already opened a role today? Its cards stay the same when you return. Other preference changes don’t replace an existing daily plan. A new pace starts with the next daily lesson."))
                                 .font(.footnote).foregroundStyle(LucidColour.secondaryOnDark)
                         }
                     }
 
-                    OnboardingSection(number: "01", title: "Your role") {
-                        Picker("Professional role", selection: $roleId) {
-                            ForEach(catalog.roles) { role in Text(role.label).tag(role.id) }
+                    OnboardingSection(number: "01", title: learningText("Your role")) {
+                        Picker(learningText("Professional role"), selection: $roleId) {
+                            ForEach(catalog.roles) { role in Text(learningText(role.label)).tag(role.id) }
                         }
                         .pickerStyle(.menu)
                         .tint(LucidColour.mint)
-                        Text(role?.description ?? "")
+                        Text(learningText(role?.description ?? ""))
                             .font(.subheadline)
                             .foregroundStyle(.white.opacity(0.68))
                     }
 
-                    OnboardingSection(number: "02", title: "Your career stage") {
-                        Picker("Seniority", selection: $seniorityId) {
-                            ForEach(catalog.seniorityLevels) { level in Text(level.label).tag(level.id) }
+                    OnboardingSection(number: "02", title: learningText("Your career stage")) {
+                        Picker(learningText("Seniority"), selection: $seniorityId) {
+                            ForEach(catalog.seniorityLevels) { level in Text(learningText(level.label)).tag(level.id) }
                         }
                         .pickerStyle(.menu)
                         .tint(LucidColour.mint)
                         if let level = catalog.seniorityLevels.first(where: { $0.id == seniorityId }) {
-                            Text(level.communicationFocus)
+                            Text(learningText(level.communicationFocus))
                                 .font(.subheadline)
                                 .foregroundStyle(.white.opacity(0.68))
                         }
-                        Text("This describes your work, not your English ability. After setup, a short starting-point check can help you choose where to begin your course.")
+                        Text(learningText("This describes your work, not your English ability. After setup, a short starting-point check can help you choose where to begin your course."))
                             .font(.footnote).foregroundStyle(LucidColour.secondaryOnDark)
                     }
 
-                    OnboardingSection(number: "03", title: "Daily situations") {
-                        Text("Choose at least one.")
+                    OnboardingSection(number: "03", title: learningText("Daily situations")) {
+                        Text(learningText("Choose at least one."))
                             .font(.caption)
                             .foregroundStyle(.white.opacity(0.62))
                         ForEach(role?.situations ?? []) { situation in
                             SelectionRow(
-                                title: situation.label,
-                                subtitle: situation.description,
+                                title: learningText(situation.label),
+                                subtitle: learningText(situation.description),
                                 selected: situationIds.contains(situation.id)
                             ) {
                                 toggle(situation.id, in: &situationIds)
@@ -397,14 +417,14 @@ struct OnboardingView: View {
                         }
                     }
 
-                    OnboardingSection(number: "04", title: "Communication goals") {
-                        Text("Choose at least one.")
+                    OnboardingSection(number: "04", title: learningText("Communication goals")) {
+                        Text(learningText("Choose at least one."))
                             .font(.caption)
                             .foregroundStyle(.white.opacity(0.62))
                         ForEach(catalog.goals) { goal in
                             SelectionRow(
-                                title: goal.label,
-                                subtitle: goal.outcome,
+                                title: learningText(goal.label),
+                                subtitle: learningText(goal.outcome),
                                 selected: goalIds.contains(goal.id)
                             ) {
                                 toggle(goal.id, in: &goalIds)
@@ -442,26 +462,26 @@ struct OnboardingView: View {
                             roleId: roleId, seniorityId: seniorityId,
                             situationIds: Array(situationIds).sorted(), goalIds: Array(goalIds).sorted()
                         ), name: name, goal: dailyGoal)
-                        saveError = saved ? nil : (store.storageNotice ?? store.accountNotice ?? "Your preferences could not be saved. Check your selections and try again.")
+                        saveError = saved ? nil : (store.storageNotice ?? store.accountNotice ?? learningText("Your preferences could not be saved. Check your selections and try again."))
                         if saved && editing { dismiss(); store.openToday() }
                     } label: {
-                        Text(editing ? "Save and open Today" : "Build my first lesson")
+                        Text(editing ? learningText("Save and open Today") : learningText("Build my first lesson"))
                             .font(.headline).frame(maxWidth: .infinity, minHeight: 54)
                     }
                     .buttonStyle(.borderedProminent).tint(LucidColour.mint).foregroundStyle(LucidColour.midnight)
                     .disabled(!canContinue)
                     .accessibilityIdentifier("onboarding.continue")
-                    .accessibilityHint(editing ? "Saves your preferences and opens Today. A new role updates your words immediately." : "Creates a personalised lesson with up to \(dailyGoal) professional words")
+                    .accessibilityHint(editing ? learningText("Saves your preferences and opens Today. A new role updates your words immediately.") : learningFormat("Creates a personalised lesson with up to {count} professional words", ["count": String(dailyGoal)]))
                 }
                 .padding(.horizontal, 24).padding(.vertical, 12).frame(maxWidth: 760)
                 .frame(maxWidth: .infinity).background(LucidColour.midnight)
             }
             .toolbar {
-                if editing { ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } } }
+                if editing { ToolbarItem(placement: .cancellationAction) { Button(learningText("Cancel")) { dismiss() } } }
                 else if let onBack {
                     ToolbarItem(placement: .cancellationAction) {
-                        Button("Back", systemImage: "chevron.left", action: onBack)
-                            .accessibilityHint("Returns to welcome and backup options")
+                        Button(learningText("Back"), systemImage: "chevron.left", action: onBack)
+                            .accessibilityHint(learningText("Returns to welcome and backup options"))
                     }
                 }
             }
@@ -480,6 +500,7 @@ struct OnboardingView: View {
 }
 
 struct OnboardingSection<Content: View>: View {
+    @AppStorage(LearningLanguage.preferenceKey) private var learningLanguageCode = "en"
     let number: String
     let title: String
     @ViewBuilder let content: Content
@@ -505,6 +526,7 @@ struct OnboardingSection<Content: View>: View {
 }
 
 struct SelectionRow: View {
+    @AppStorage(LearningLanguage.preferenceKey) private var learningLanguageCode = "en"
     let title: String
     let subtitle: String
     let selected: Bool
@@ -532,11 +554,12 @@ struct SelectionRow: View {
             .frame(minHeight: 44)
         }
         .buttonStyle(.plain)
-        .accessibilityValue(selected ? "Selected" : "Not selected")
+        .accessibilityValue(selected ? learningText("Selected") : learningText("Not selected"))
     }
 }
 
 struct BrandHeader: View {
+    @AppStorage(LearningLanguage.preferenceKey) private var learningLanguageCode = "en"
     var onDark = false
 
     var body: some View {
@@ -549,18 +572,19 @@ struct BrandHeader: View {
                 Text("Lucid")
                     .font(.system(.title2, design: .serif, weight: .bold))
                     .foregroundStyle(onDark ? .white : LucidColour.ink)
-                Text("PROFESSIONAL VOCABULARY")
+                Text(learningText("PROFESSIONAL VOCABULARY"))
                     .font(.caption2.weight(.bold))
                     .tracking(1.2)
                     .foregroundStyle(onDark ? .white.opacity(0.65) : LucidColour.muted)
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("Lucid professional vocabulary")
+        .accessibilityLabel(learningText("Lucid professional vocabulary"))
     }
 }
 
 struct TodayView: View {
+    @AppStorage(LearningLanguage.preferenceKey) private var learningLanguageCode = "en"
     @EnvironmentObject private var store: LearningStore
     @Environment(\.requestReview) private var requestReview
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -574,26 +598,31 @@ struct TodayView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         PracticeStatusBanner()
-                        PracticeDashboard()
-                        if !store.currentRoleDueWords.isEmpty {
-                            Button(action: store.openReview) {
-                                HStack {
-                                    Label("\(store.currentRoleDueWords.count) \(store.currentRoleDueWords.count == 1 ? "review" : "reviews") for your role", systemImage: "arrow.triangle.2.circlepath")
-                                    Spacer()
-                                    Image(systemName: "chevron.right")
-                                }.font(.headline).padding(18).frame(minHeight: 54)
-                            }
-                            .buttonStyle(.plain).foregroundStyle(LucidColour.mint)
-                            .background(LucidColour.raisedSurface, in: RoundedRectangle(cornerRadius: 18))
+                        DailyLearningOverview()
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(learningText("Course practice")).font(.headline)
+                                .accessibilityAddTraits(.isHeader)
+                            Text(learningFormat("Your existing {count}-word pace · Separate from daily discovery", ["count": String(store.dailyGoal)]))
+                                .font(.subheadline).foregroundStyle(LucidColour.secondaryOnDark)
                         }
+                        PracticeDashboard()
+                        NavigationLink { ExpressionStudioView() } label: {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Label(learningText("Find words for your next conversation"), systemImage: "text.bubble").font(.headline)
+                                Text(store.fifthDayChallengeDue ? learningText("A cumulative transfer challenge is ready.") : (store.comebackSuggested ? learningText("Start again with up to three familiar situations.") : learningText("Capture an expression gap, rehearse tomorrow and compare natural wording.")))
+                                    .font(.subheadline).foregroundStyle(LucidColour.secondaryOnDark)
+                            }.frame(maxWidth: .infinity, alignment: .leading).padding(18)
+                        }.buttonStyle(.plain).foregroundStyle(LucidColour.mint)
+                            .background(LucidColour.raisedSurface, in: RoundedRectangle(cornerRadius: 18))
+                            .accessibilityIdentifier("today.expression-studio")
                         if store.todayWords.isEmpty {
-                            EmptyState(icon: "books.vertical", title: "A day to put it into practice", message: "Explore saved words in your Library, or return when a review is due. You can update your role or goals in Settings.")
-                            Button("Open my word library", action: store.openLibrary)
+                            EmptyState(icon: "books.vertical", title: learningText("A day to put it into practice"), message: learningText("Explore saved words in your Library, or return when a review is due. You can update your role or goals in Settings."))
+                            Button(learningText("Open my word library"), action: store.openLibrary)
                                 .buttonStyle(.bordered).frame(minHeight: 48)
                         } else {
                             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: dynamicTypeSize.isAccessibilitySize ? 1 : store.todayWords.count), spacing: 10) {
                                 ForEach(Array(store.todayWords.enumerated()), id: \.element.id) { index, word in
-                                    let hasSeenAnswer = store.data.completedWordIdsToday.contains(word.id)
+                                    let hasSeenAnswer = store.isCurrentRoleWordComplete(word.id)
                                         || store.practiceChallenge(for: word.id).flatMap { store.tapAttempt(for: $0) }?.revealed == true
                                     Button {
                                         if store.focusPracticeWord(word.id) {
@@ -601,7 +630,7 @@ struct TodayView: View {
                                         }
                                     } label: {
                                         VStack(spacing: 6) {
-                                            Image(systemName: store.data.completedWordIdsToday.contains(word.id) ? "checkmark.circle.fill" : "\(index + 1).circle")
+                                            Image(systemName: store.isCurrentRoleWordComplete(word.id) ? "checkmark.circle.fill" : "\(index + 1).circle")
                                             Text(hasSeenAnswer ? word.term : "Word \(index + 1)").font(.subheadline.weight(.semibold))
                                                 .fixedSize(horizontal: false, vertical: true)
                                         }.frame(maxWidth: .infinity, minHeight: 64).padding(8)
@@ -611,7 +640,7 @@ struct TodayView: View {
                                     }
                                     .buttonStyle(.plain).foregroundStyle(LucidColour.textOnDark)
                                     .accessibilityLabel(hasSeenAnswer ? "Word \(index + 1): \(word.term)" : "Word \(index + 1)")
-                                    .accessibilityValue(store.data.completedWordIdsToday.contains(word.id) ? "Practised" : "Ready to practise")
+                                    .accessibilityValue(store.isCurrentRoleWordComplete(word.id) ? learningText("Practised") : learningText("Ready to practise"))
                                     .accessibilityAddTraits(selectedWordIndex == index ? .isSelected : [])
                                 }
                             }.id("wordSteps")
@@ -623,7 +652,7 @@ struct TodayView: View {
                                 }.frame(minHeight: 44)
                             }
                             WordLearningCard(word: word, number: safeIndex + 1, onContinue: {
-                                if let next = store.todayWords.firstIndex(where: { !store.data.completedWordIdsToday.contains($0.id) }) {
+                                if let next = store.todayWords.firstIndex(where: { !store.isCurrentRoleWordComplete($0.id) }) {
                                     if store.focusPracticeWord(store.todayWords[next].id) {
                                         selectedWordIndex = next
                                         withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.25)) { proxy.scrollTo("wordSteps", anchor: .top) }
@@ -634,7 +663,7 @@ struct TodayView: View {
                                     showCelebration = true
                                 }
                             }, onSkip: {
-                                let remaining = store.todayWords.indices.filter { $0 != safeIndex && !store.data.completedWordIdsToday.contains(store.todayWords[$0].id) }
+                                let remaining = store.todayWords.indices.filter { $0 != safeIndex && !store.isCurrentRoleWordComplete(store.todayWords[$0].id) }
                                 if let next = remaining.first(where: { $0 > safeIndex }) ?? remaining.first {
                                     if store.focusPracticeWord(store.todayWords[next].id) {
                                         selectedWordIndex = next
@@ -646,7 +675,7 @@ struct TodayView: View {
                             })
                                 .id("\(store.practiceAccountToken)-\(store.profile?.roleId ?? "")-\(store.data.lessonDayKey ?? "")-\(word.id)")
                             if store.isTodayComplete {
-                                Label(store.isCurrentPlanComplete ? "Current practice complete · Daily bonus earned" : "Daily bonus earned · Continue with the words above", systemImage: "checkmark.seal.fill")
+                                Label(store.isCurrentPlanComplete ? learningText("Current practice complete · Daily bonus earned") : learningText("Daily bonus earned · Continue with the words above"), systemImage: "checkmark.seal.fill")
                                     .font(.subheadline).foregroundStyle(LucidColour.mint)
                                     .frame(maxWidth: .infinity, alignment: .leading).padding(16)
                             } else if store.lessonProgress >= 1 {
@@ -658,7 +687,7 @@ struct TodayView: View {
                                     }
                                 }
                             } label: {
-                                Label("Finish today’s lesson · +20 XP", systemImage: "checkmark.seal.fill")
+                                Label(learningText("Finish today’s lesson · +20 XP"), systemImage: "checkmark.seal.fill")
                                     .font(.headline).frame(maxWidth: .infinity, minHeight: 52)
                             }
                             .buttonStyle(.borderedProminent).tint(LucidColour.mint).foregroundStyle(LucidColour.midnight)
@@ -675,7 +704,7 @@ struct TodayView: View {
                 }
             }
             .lucidBackground()
-            .navigationTitle("Today")
+            .navigationTitle(learningText("Today"))
             .lucidHomeNavigation()
             .lucidKeyboardDismissal()
             .navigationBarTitleDisplayMode(.inline)
@@ -695,6 +724,7 @@ struct TodayView: View {
 }
 
 struct DailyHero: View {
+    @AppStorage(LearningLanguage.preferenceKey) private var learningLanguageCode = "en"
     let role: ProfessionalRole?
     let progress: Double
     let dueCount: Int
@@ -702,16 +732,16 @@ struct DailyHero: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             BrandHeader(onDark: true)
-            Text("Three words for your real workday.")
+            Text(learningText("Three words for your real workday."))
                 .font(.system(.largeTitle, design: .serif))
                 .foregroundStyle(.white)
-            Text(role?.description ?? "A focused professional English lesson.")
+            Text(role?.description ?? learningText("A focused professional English lesson."))
                 .foregroundStyle(.white.opacity(0.8))
                 .lineSpacing(3)
             HStack(spacing: 16) {
                 ProgressView(value: progress)
                     .tint(LucidColour.mint)
-                    .accessibilityLabel("Lesson progress")
+                    .accessibilityLabel(learningText("Lesson progress"))
                     .accessibilityValue("\(Int(progress * 100)) percent")
                 Text("\(Int(progress * 3))/3")
                     .font(.headline.monospacedDigit())
@@ -731,6 +761,7 @@ struct DailyHero: View {
 struct WordLearningCard: View {
     @EnvironmentObject private var store: LearningStore
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let word: ProfessionalWord
     let number: Int
     let onContinue: () -> Void
@@ -739,14 +770,20 @@ struct WordLearningCard: View {
     @StateObject private var player = SpeechPlayer()
     @State private var showDetails = false
     @AccessibilityFocusState private var feedbackFocused: Bool
-    private var completed: Bool { store.data.completedWordIdsToday.contains(word.id) }
+    private var completed: Bool { store.isCurrentRoleWordComplete(word.id) }
+    private var headerLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 8)) : AnyLayout(HStackLayout(spacing: 8))
+    }
+    private var choiceLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12)) : AnyLayout(HStackLayout(alignment: .top, spacing: 12))
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            HStack {
+            headerLayout {
                 Text("QUICK CHALLENGE \(number)").font(.caption.weight(.bold)).tracking(1)
                     .foregroundStyle(LucidColour.mint)
-                Spacer()
+                if !dynamicTypeSize.isAccessibilitySize { Spacer() }
                 Button(action: onPause) { Text("Pause").frame(minWidth: 44, minHeight: 44).contentShape(Rectangle()) }
                     .accessibilityIdentifier("practice.pause")
             }
@@ -786,12 +823,12 @@ struct WordLearningCard: View {
                             LucidAccessibility.announce(option.id == challenge.correctId ? "Correct. Practice saved." : "Not quite. " + option.explanation + " Try another answer.")
                         }
                     } label: {
-                        HStack(alignment: .top, spacing: 12) {
+                        choiceLayout {
                             Image(systemName: selected ? "arrow.uturn.backward.circle" : "circle")
                                 .foregroundStyle(selected ? LucidColour.coral : LucidColour.mint)
                             Text(option.text).font(.body.weight(.medium)).multilineTextAlignment(.leading)
                                 .fixedSize(horizontal: false, vertical: true)
-                            Spacer(minLength: 0)
+                            if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
                         }.padding(16).frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
                             .background(LucidColour.raisedSurface, in: RoundedRectangle(cornerRadius: 16))
                             .overlay(RoundedRectangle(cornerRadius: 16).stroke(selected ? LucidColour.coral : .white.opacity(0.12)))

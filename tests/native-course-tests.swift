@@ -62,6 +62,7 @@ func expect(_ value: @autoclosure () throws -> Bool, _ message: String) throws {
             let bytes = try JSONEncoder().encode(legacy)
             let decoded = try JSONDecoder().decode(LearnerData.self, from: bytes)
             try expect(decoded.pathPlacements == nil && decoded.courseCheckDrafts == nil, "Optional fields required a migration")
+            try expect(decoded.contextIntroducedOn == nil && decoded.contextEvidence == nil, "Legacy decode invented role-context learning")
             try expect(decoded.favouriteWordIds == legacy.favouriteWordIds, "Legacy favourite lost")
         }
         try test("submitted answers resume on disk and duplicate taps cannot advance") {
@@ -83,6 +84,8 @@ func expect(_ value: @autoclosure () throws -> Bool, _ message: String) throws {
             try expect(store.applyStartingPoint(pathId: path.id, useSuggested: true), "Could not apply starting point")
             try expect(store.data.currentWordIds == Array(path.modules[4].lessons.flatMap(\.wordIds).prefix(3)), "Untouched cards were not replanned")
             try expect(store.data.introducedWordIds.isEmpty && store.data.progressByWordId.isEmpty && store.activities.isEmpty && store.totalXP == 0 && store.pathProgress == 0, "Placement invented learning")
+            try expect((store.data.contextIntroducedOn ?? [:]).isEmpty && (store.data.contextEvidence ?? []).isEmpty,
+                "Recognition placement invented role-context introduction or evidence")
             try expect(store.nextPathLesson?.id == path.modules[4].lessons[0].id, "Next lesson ignores starting chapter")
         }
         try test("intermediate result requires foundational evidence; not-sure is valid") {
