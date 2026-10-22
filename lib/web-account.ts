@@ -1,6 +1,6 @@
 /** Shared learner identity uses the existing Supabase Auth UUID; no email-based account joining. */
-export type SharedAuthConfig = { url: string; publicKey: string; emailReady: boolean };
-export type WebAccount = { enabled: boolean; emailReady: boolean; identity: string | null; email: string | null; error?: string };
+export type SharedAuthConfig = { url: string; publicKey: string; emailReady: boolean; signupEnabled: boolean };
+export type WebAccount = { enabled: boolean; emailReady: boolean; signupEnabled?: boolean; identity: string | null; email: string | null; error?: string };
 export type AccountEnvironment = Record<string, unknown>;
 export const SHARED_COOKIE_NAMES = { access: "lucid-shared-access", refresh: "lucid-shared-refresh" } as const;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -22,7 +22,7 @@ export function sharedAuthConfig(environment: AccountEnvironment): SharedAuthCon
       if (claims.role !== "anon") return null;
     } else if (!publicKey.startsWith("sb_publishable_") && !local) return null;
     if ((parsed.protocol !== "https:" && !(local && parsed.protocol === "http:")) || parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== "/") return null;
-    return { url: parsed.origin, publicKey, emailReady: environment.LUCID_SHARED_EMAIL_ENABLED === "true" };
+    return { url: parsed.origin, publicKey, emailReady: environment.LUCID_SHARED_EMAIL_ENABLED === "true", signupEnabled: environment.LUCID_SHARED_EMAIL_ENABLED === "true" && environment.LUCID_SHARED_SIGNUP_ENABLED === "true" };
   } catch { return null; }
 }
 export function requireSameOrigin(request: Request) {
@@ -105,7 +105,7 @@ export async function handleAccountRequest(request: Request, environment: Accoun
   try {
     if (action === "status") {
       const account = await verifiedSharedAccount(request, environment, fetcher);
-      return accountJSON(request, { enabled: Boolean(config), emailReady: config?.emailReady === true, identity: account?.identity ?? null, email: account?.email ?? null }, 200, account?.cookies);
+      return accountJSON(request, { enabled: Boolean(config), emailReady: config?.emailReady === true, signupEnabled: config?.signupEnabled === true, identity: account?.identity ?? null, email: account?.email ?? null }, 200, account?.cookies);
     }
     requireSameOrigin(request);
     if (request.method !== "POST") throw new WebAccountError("POST required for account changes.", 405);
@@ -135,12 +135,12 @@ export async function handleAccountRequest(request: Request, environment: Accoun
       const session = sessionValue(await providerRequest(config, "auth/v1/verify", { method: "POST", body: { email: account.email, token: body.code, type: "email" } }, fetcher));
       const user = userValue(await providerRequest(config, "auth/v1/user", { token: session.access_token }, fetcher));
       if (user.id.toLowerCase() !== account.userId || user.id.toLowerCase() !== session.user.id.toLowerCase()) throw new WebAccountError("Verification returned a different learner account. No account was changed.", 409);
-      return accountJSON(request, { enabled: true, emailReady: true, identity: account.identity, email: user.email ?? null, reverified: true }, 200, sessionCookies(request, session));
+      return accountJSON(request, { enabled: true, emailReady: true, signupEnabled: config.signupEnabled, identity: account.identity, email: user.email ?? null, reverified: true }, 200, sessionCookies(request, session));
     }
     if (action === "otp") {
       if (!config.emailReady) throw new WebAccountError("Email sign-in is not enabled for this preview.", 503);
-      // This module signs in existing learner accounts. Public signup is a separate approval.
-      await providerRequest(config, "auth/v1/otp", { method: "POST", body: { email: emailValue(body.email), create_user: false } }, fetcher);
+      // Verified-email signup requires a separate server-side opt-in; request bodies cannot enable it.
+      await providerRequest(config, "auth/v1/otp", { method: "POST", body: { email: emailValue(body.email), create_user: config.signupEnabled } }, fetcher);
       return accountJSON(request, { sent: true });
     }
     if (action === "verify") {
@@ -149,14 +149,14 @@ export async function handleAccountRequest(request: Request, environment: Accoun
       const session = sessionValue(await providerRequest(config, "auth/v1/verify", { method: "POST", body: { email: emailValue(body.email), token: body.code, type: "email" } }, fetcher));
       const user = userValue(await providerRequest(config, "auth/v1/user", { token: session.access_token }, fetcher));
       if (user.id.toLowerCase() !== session.user.id.toLowerCase()) throw new WebAccountError("The verified account changed before sign-in.");
-      return accountJSON(request, { enabled: true, emailReady: true, identity: `supabase:${user.id.toLowerCase()}`, email: user.email ?? null }, 200, sessionCookies(request, session));
+      return accountJSON(request, { enabled: true, emailReady: true, signupEnabled: config.signupEnabled, identity: `supabase:${user.id.toLowerCase()}`, email: user.email ?? null }, 200, sessionCookies(request, session));
     }
     throw new WebAccountError("Unsupported account action.", 404);
   } catch (error) {
     const failure = error instanceof WebAccountError ? error : new WebAccountError("Unable to connect to the account service.", 503);
     // A late failure from an older refresh must not erase a newer valid session.
     // Only explicit sign-out clears browser cookies.
-    return accountJSON(request, { enabled: Boolean(config), emailReady: config?.emailReady === true, identity: null, email: null, requiresSignIn: failure.status === 401, error: failure.message }, failure.status);
+    return accountJSON(request, { enabled: Boolean(config), emailReady: config?.emailReady === true, signupEnabled: config?.signupEnabled === true, identity: null, email: null, requiresSignIn: failure.status === 401, error: failure.message }, failure.status);
   }
 }
 export async function sharedBackendRequest(account: VerifiedSharedAccount, path: string, options: { method?: string; body?: unknown } = {}, fetcher: typeof fetch = fetch) {

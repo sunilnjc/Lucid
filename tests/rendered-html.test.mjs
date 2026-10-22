@@ -232,9 +232,24 @@ test("server-renders the professional-English product handoff", async () => {
     /<meta[^>]+name=["']description["'][^>]+content=["'][^"']*Role-specific daily vocabulary practice/i,
   );
   assert.match(html, /<main\b/i);
-  assert.match(html, /class=["'][^"']*loading-screen/i);
-  assert.match(html, /<h1>Lucid<\/h1>/i);
-  assert.match(html, /Preparing your professional English path/i);
+  assert.ok(/class=["'][^"']*guest-public-shell/i.test(html), "the server handoff must immediately expose public exploration");
+  assert.ok(/aria-label=["']Explore without an account["']/i.test(html), "public dictionary navigation must precede account setup");
+  assert.ok(/<h1[^>]*>Find language you want to use\.<\/h1>/i.test(html), "the initial heading must invite exploration");
+  for (const label of ["Browse all words", "Explore idioms"]) {
+    const button = [...html.matchAll(/<button\b[^>]*>[\s\S]*?<\/button>/g)].find(([markup]) => markup.endsWith(`>${label}</button>`))?.[0];
+    assert.ok(button, `the public handoff must offer ${label}`);
+    assert.doesNotMatch(button, /\bdisabled(?:=|\s|>)/, `${label} must be available while identity is checked`);
+  }
+  assert.ok(/no sign-in needed/i.test(html), "initial exploration must not require sign-in");
+  assert.ok(/Try up to 5 words or expressions in this tab’s temporary session/i.test(html), "the guest allowance must be disclosed as temporary");
+  assert.ok(/Personalization is optional/i.test(html), "the full profile flow must remain optional");
+  assert.ok(/<button[^>]*disabled=["']["'][^>]*>Preparing practice session…<\/button>/.test(html), "practice changes must wait for guest storage initialization");
+  for (const className of ["account-access-optional", "pwa-install-optional"]) {
+    const details = [...html.matchAll(/<details\b[^>]*>/g)].find(([markup]) => markup.includes(className))?.[0];
+    assert.ok(details, `${className} controls must remain available as optional details`);
+    assert.doesNotMatch(details, /\bopen(?:=|\s|>)/, `${className} must not cover the initial exploration handoff`);
+  }
+  assert.ok(!/class=["'][^"']*loading-screen/i.test(html), "public browsing must not be replaced by a loading wall");
 });
 
 test("does not ship starter metadata or the loading skeleton", async () => {

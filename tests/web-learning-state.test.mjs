@@ -20,10 +20,15 @@ const sharedSource = stripTypeScriptTypes(await readFile(new URL("../lib/shared-
   .replace('from "./expression-content"', `from "${expressionURL}"`)
   .replace('from "./web-learning-state"', `from "${stateURL}"`);
 const sharedURL = `data:text/javascript;base64,${Buffer.from(sharedSource).toString("base64")}`;
+const guestSource = stripTypeScriptTypes(await readFile(new URL("../lib/guest-learning.ts", import.meta.url), "utf8"))
+  .replace('from "./expression-content"', `from "${expressionURL}"`);
+const guestURL = `data:text/javascript;base64,${Buffer.from(guestSource).toString("base64")}`;
 const syncSource = stripTypeScriptTypes(await readFile(new URL("../lib/web-learning-sync.ts", import.meta.url), "utf8"))
   .replace(/import \{ useCallback, useEffect, useRef, useState \} from "react";/, "const useCallback = (f) => f, useEffect = () => {}, useRef = () => {}, useState = () => {};")
   .replace('from "./web-learning-state"', `from "${stateURL}"`)
-  .replace('from "./shared-learning-state"', `from "${sharedURL}"`);
+  .replace('from "./shared-learning-state"', `from "${sharedURL}"`)
+  .replace('from "./daily-vocabulary-state"', `from "${dailyStateURL}"`)
+  .replace('from "./guest-learning"', `from "${guestURL}"`);
 const { createWebLearningSync } = await import(`data:text/javascript;base64,${Buffer.from(syncSource).toString("base64")}`);
 const defaults = { version: 2, profile: null, settings: { lessonTime: "09:00", timeZone: "Etc/UTC", dailyWordCount: 3 }, introducedWordIds: [], masteryByWordId: {}, dailySessions: [], favouriteIds: [], difficultIds: [], reviewedIds: [], completedDays: [], quizAttempts: [] };
 const fresh = () => learning.prepareWebState(defaults, defaults);
@@ -143,7 +148,7 @@ const routeSource = stripTypeScriptTypes(await readFile(new URL("../app/api/stat
   .replace('import { env } from "cloudflare:workers";', 'const env = {};')
   .replace('from "@/lib/web-account"', `from "${accountURL}"`)
   .replace('from "@/lib/shared-learning-state"', `from "${sharedURL}"`)
-  .replace('import { and, eq } from "drizzle-orm";', 'const eq=(field,value)=>({field,value}),and=(...conditions)=>({conditions});')
+  .replace('import { eq } from "drizzle-orm";', 'const eq=(field,value)=>({field,value});')
   .replace('import { getDb, initializeDatabase } from "@/db";', 'const getDb=()=>globalThis.__lucidTestDb,initializeDatabase=async()=>{};')
   .replace('import { learnerState } from "@/db/schema";', 'const learnerState={userKey:"userKey",updatedAt:"updatedAt"};')
   .replace('from "@/lib/web-learning-state"', `from "${stateURL}"`);
@@ -156,22 +161,26 @@ function dbFixture() {
     update() { return { set(value) { return { where({ conditions }) { return { async returning() { const key = conditions.find((item) => item.field === "userKey").value; const time = conditions.find((item) => item.field === "updatedAt").value; const row = rows.get(key); if (!row || row.updatedAt.getTime() !== time.getTime()) return []; rows.set(key, { ...row, ...value }); return [{ userKey: key }]; } }; } }; } }; },
   };
 }
-const request = (state, scopeKey = "device:device-123456") => new Request("http://localhost/api/state", { method: "PUT", headers: { "x-lucid-device-id": "device-123456", "content-type": "application/json" }, body: JSON.stringify({ scopeKey, state }) });
+const request = (state, scopeKey = "device:device-123456") => new Request("http://localhost/api/state", { method: "PUT", headers: { origin: "http://localhost", "x-lucid-device-id": "device-123456", "content-type": "application/json" }, body: JSON.stringify({ scopeKey, state }) });
 
-test("server CAS merges concurrent first inserts and later updates without overwrite", async () => {
+test("server refuses concurrent guest durable saves while retaining existing legacy records", async () => {
   globalThis.__lucidTestDb = dbFixture(); const a = fresh(), b = fresh(); a.introducedWordIds = ["word-a"]; b.introducedWordIds = ["word-b"];
   a.learningV3.reviewEvidence = [event("2026-10-02")]; b.learningV3.reviewEvidence = [event("2026-10-03")];
-  const results = await Promise.all([route.PUT(request(a)), route.PUT(request(b))]); assert.deepEqual(results.map((item) => item.status), [200, 200]);
-  let persisted = globalThis.__lucidTestDb.rows.get("device:device-123456").state; assert.deepEqual(persisted.introducedWordIds, ["word-a", "word-b"]); assert.equal(persisted.learningV3.reviewEvidence.length, 2);
-  const c = fresh(), d = fresh(); c.introducedWordIds = ["word-c"]; d.introducedWordIds = ["word-d"];
-  assert.deepEqual((await Promise.all([route.PUT(request(c)), route.PUT(request(d))])).map((item) => item.status), [200, 200]);
-  persisted = globalThis.__lucidTestDb.rows.get("device:device-123456").state; assert.deepEqual(persisted.introducedWordIds, ["word-a", "word-b", "word-c", "word-d"]);
+  const results = await Promise.all([route.PUT(request(a)), route.PUT(request(b))]); assert.deepEqual(results.map((item) => item.status), [401, 401]);
+  assert.equal(globalThis.__lucidTestDb.rows.size, 0);
+  const original = { userKey: "device:device-123456", state: a, updatedAt: new Date() };
+  globalThis.__lucidTestDb.rows.set(original.userKey, original);
+  const before = JSON.stringify(original);
+  assert.equal((await route.PUT(request(b))).status, 401);
+  assert.equal(JSON.stringify(globalThis.__lucidTestDb.rows.get(original.userKey)), before);
+  const oldRead = await route.GET(new Request("http://localhost/api/state", { headers: { "x-lucid-device-id": "device-123456", "x-lucid-state-source": "legacy" } }));
+  assert.equal(oldRead.status, 200); assert.deepEqual((await oldRead.json()).state.introducedWordIds, ["word-a"]);
 });
 
-test("server rejects identity mismatches and preserves an unreadable saved record", async () => {
-  globalThis.__lucidTestDb = dbFixture(); const mismatch = await route.PUT(request(fresh(), "user:previous-account")); assert.equal(mismatch.status, 409); assert.equal(globalThis.__lucidTestDb.rows.size, 0);
+test("server cannot write through a claimed legacy identity and preserves an unreadable saved record", async () => {
+  globalThis.__lucidTestDb = dbFixture(); const mismatch = await route.PUT(request(fresh(), "user:previous-account")); assert.equal(mismatch.status, 401); assert.equal(globalThis.__lucidTestDb.rows.size, 0);
   globalThis.__lucidTestDb.rows.set("device:device-123456", { userKey: "device:device-123456", state: { version: 99 }, updatedAt: new Date() });
-  assert.equal((await route.PUT(request(fresh()))).status, 422); assert.equal(globalThis.__lucidTestDb.rows.get("device:device-123456").state.version, 99);
+  assert.equal((await route.PUT(request(fresh()))).status, 401); assert.equal(globalThis.__lucidTestDb.rows.get("device:device-123456").state.version, 99);
   const response = await route.GET(new Request("http://localhost/api/state", { headers: { "x-lucid-device-id": "device-123456" } })); assert.equal(response.headers.get("cache-control"), "no-store, private"); assert.equal(response.status, 422);
 });
 

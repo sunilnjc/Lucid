@@ -17,7 +17,7 @@ export function accountMessage(error: unknown): string {
 }
 export function accountFromReply(value: AccountReply): WebAccount {
   if (typeof value.enabled !== "boolean" || typeof value.emailReady !== "boolean" || !(value.identity === null || (typeof value.identity === "string" && identityPattern.test(value.identity))) || !(value.email === null || (typeof value.email === "string" && value.email.length <= 254))) throw new WebAccountRequestError("The account service returned an unsupported record. Reconnect to check sign-in.", 502);
-  return { enabled: value.enabled, emailReady: value.emailReady, identity: value.identity, email: value.email };
+  return { enabled: value.enabled, emailReady: value.emailReady, ...(typeof value.signupEnabled === "boolean" ? { signupEnabled: value.signupEnabled } : {}), identity: value.identity, email: value.email };
 }
 /** Only account metadata reaches React. Provider sessions remain in HttpOnly cookies. */
 export async function requestWebAccount(action: AccountAction, body?: unknown, fetcher: typeof fetch = fetch): Promise<AccountReply> {
@@ -29,6 +29,7 @@ export async function requestWebAccount(action: AccountAction, body?: unknown, f
   const value: AccountReply = {};
   if (typeof record.enabled === "boolean") value.enabled = record.enabled;
   if (typeof record.emailReady === "boolean") value.emailReady = record.emailReady;
+  if (typeof record.signupEnabled === "boolean") value.signupEnabled = record.signupEnabled;
   if (record.identity === null || (typeof record.identity === "string" && identityPattern.test(record.identity))) value.identity = record.identity;
   if (record.email === null || (typeof record.email === "string" && record.email.length <= 254)) value.email = record.email;
   for (const key of ["sent", "signedOut", "reverified"] as const) if (typeof record[key] === "boolean") value[key] = record[key];

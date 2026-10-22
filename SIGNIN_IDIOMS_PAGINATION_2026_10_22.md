@@ -1,73 +1,119 @@
-# Sign-in, idiom discovery and pagination — 22 October 2026
+# Sign-in, guest exploration, idioms and pagination — 22 October 2026
 
-Status: **source frozen and locally verified; current public Site remains version 7**. Implementation commit `6cae19c9bbca457602fceaeec1bde3fefc83f576` was pushed to GitHub `main` and verified remotely. This follow-up record distinguishes that source delivery from website delivery; no new deployment receipt is claimed. The user authorized code changes, the GitHub push and release to [learnwithlucid.com](https://learnwithlucid.com), including Library/idiom search and A–Z pagination with at most 20 entries per page. No new provider, credential creation, public signup, destructive account feature or owner-phone change is included.
+**Version 8 is live on [learnwithlucid.com](https://learnwithlucid.com), including [Korean idioms](https://learnwithlucid.com/?lang=ko&view=idioms).** The guest-first and signup follow-up is locally verified and prepared for release, with public deployment still pending. Public shared sign-in remains disabled. GitHub follow-up: the source is tested locally; the verified implementation receipt is added below after push.
 
-## Scope and source review
+This record separates live delivery, prepared source, local verification and real-provider acceptance. Exact version-8 provenance is retained in [PUBLICATION_2026_10_22.md](PUBLICATION_2026_10_22.md); the new backend setup is recorded in [SUPABASE_SETUP_2026_10_22.md](SUPABASE_SETUP_2026_10_22.md).
 
-- Library and idiom browsing filter/search first, then sort by English term A–Z, then slice into pages of 20. Search/filter changes reset pagination; invalid page requests clamp safely. The helper copies before sorting and uses stable IDs to resolve ties. Current 14 authored idioms fit one page; the controls support larger lists without inventing content.
-- A dedicated idiom destination and Today shortcut expose the existing authored catalog before onboarding. English examples remain visible with Korean guidance. Reference browsing earns no mastery, production/review credit or points. Daily assignments, private originals and existing review schedules are preserved.
-- Server auth validates the provider UUID, keeps provider tokens in HttpOnly cookies, rejects cross-origin mutations and preserves valid cookies when an older background refresh fails. Sign-out alone explicitly clears browser cookies. Existing-account OTP sign-in and same-account reverification use `create_user:false`; no implicit account registration is intended.
-- Browser account requests serialize status/mutations and drain learning saves before identity changes. An unsaved candidate remains bound to its original account; failed persistence blocks switching and later recovery cannot replay it into another account. Direct replacement is refused while a pending candidate exists, preventing silent loss of newer private writing.
-- Ordinary account sync remains the existing privacy-limited projection: course placement/progress, bookmarks and safe history metadata. The optional `dailyVocabulary` sidecar, including idiom schedules and private originals, stays device-local or in an explicit private backup. These changes do not claim complete cross-device portability of every saved field.
-- Native account and shared-sync regressions pass as part of the 16-suite verification. A bounded independent source review found no pagination data/order blocker. Catalog focus restoration and language wiring are complete in the frozen web source and covered by the local UI checks. No actual browser interaction, keyboard journey or mobile viewport acceptance was performed in this run.
+## Delivered version 8
 
-Direct source: `lib/list-pagination.ts`, `app/VocabularyApp.tsx`, `app/DailyVocabulary.tsx`, `lib/web-account.ts`, `lib/web-account-request.ts`, `app/WebAccountPanel.tsx`, `lib/web-learning-sync.ts`, the account/state routes and native `AccountService.swift`. No product or test files were edited for this documentation review.
+The user authorized the existing GitHub push and canonical-domain release, then approved one short-lived source-repository credential for that publication. It was used for the completed version-8 release; no replacement hosting project, DNS/mail change or alternate finished-product URL was introduced.
 
-The supplied Library reference was materialized and inspected by the coordinator at `/tmp/lucid-oct22-reference/image.png`, SHA-256 `cc25eb63770b0db167a098198096f1a30c28b5682778f18f896ff9292326bc6a`. The requested pattern is the Library filter/grid, with example cards “discrepancy”, “outstanding” and “cut-off”. No private learner writing is reproduced here.
+- GitHub implementation: `6cae19c9bbca457602fceaeec1bde3fefc83f576`; release-source checkpoint: `a41997130230b4386c39d418512072c6c9fcdc8d`.
+- Sites source: `425c31f6994a98a415af59c17265700919457f82`.
+- Deployment: `appgdep_6ada247f73b48191acc484f275366310`, succeeded; public version **8**, runtime environment revision **0**.
+- Library/idiom search and filters run first, English-headword A–Z sorting second, then pagination at at most 20 entries. Stable IDs resolve ties; search/filter changes reset or clamp pages.
+- A primary Idioms destination and Today shortcut expose all 14 authored idioms before onboarding. English examples and Korean guidance are visible; reference browsing earns no mastery or review credit. Daily curated order, IDs and schedules are preserved.
+- All 29 public precache files match tested bytes; account/auth APIs are not precached. Canonical HTTP/www redirects preserve path/query. No learner cache was cleared or waiting worker forced to activate.
 
-## Frozen web verification
+The curated hosted source passed build, TypeScript, ESLint and **153 tests**, zero failures/skips. The canonical HTTP receipt covers **47 logical checks**.
 
-The isolated release checkout is `.build/github-release-20261022`. Final web/native results are complete; delivery receipts are tracked separately.
+## Live version-8 desktop/mobile browser verification
 
-| Check | Frozen result |
+An isolated fresh **Google Chrome 156.0.8078.47 headless profile on macOS** tested the live Korean idiom route at 1440px desktop and 390px mobile widths. **12/12 checks passed**:
+
+- All 14 idioms appear in A–Z order; English headwords and Korean meanings remain visible.
+- Neither viewport has horizontal overflow.
+- Opening a detail focuses its heading; Back restores focus to the originating card.
+- Korean search returns the matching idiom; unmatched search shows an empty state with a disabled single-page pager.
+- Reference browsing has no account modal wall.
+
+Receipt: `.build/qa/2026-10-22-guest-first/live-version8-catalog-browser-receipt.json`, with screenshots/hashes. The existing signed-in browser was not used and the owned browser was closed. State API requests were deliberately blocked to avoid production learning writes. These checks establish version-8 reference browsing, not delivery of the new guest-first source, canonical account sessions, physical touch hardware or installed/offline behavior.
+
+## Locally verified guest-first and signup source
+
+The user's latest direction is free public exploration with a modest guest-practice allowance and verified sign-in for durable saving. The locally verified source implements:
+
+- Public word/idiom browsing before account/profile readiness; optional one-step role practice and personalization.
+- A fresh tab-scoped temporary learning record, with an in-memory fallback. New guest practice does not update durable anonymous server records.
+- An initial **five-distinct-item-per-tab assumption**, configurable in the policy/controller from 1–20 with a fallback of five. Words, idioms and expressions represent learning items; reference exposure and plans do not consume allowance. Revisiting admitted items remains available. This is a product allowance rather than a security, billing or entitlement boundary.
+- Separate prompts for saving and reaching the practice allowance, with a route back to browsing. Durable bookmarks, review schedules and account progress require verified sign-in.
+- Exact preservation of earlier local source bytes. Earlier-device backups and guest/legacy import stay explicit, do not run merely on sign-in, and use the safe account projection. Private writing is not silently imported or uploaded.
+- Initial verified-email signup behind explicit shared-auth/email/signup flags. Caller bodies cannot enable signup; reverification always uses the current account's server-selected email and `create_user:false`.
+- Browser/account save barriers, exact-UUID ownership, HttpOnly cookies and cross-origin mutation rejection. Account changes and revoked sessions clear stale visible private snapshots and block stale commits, while preserving exact account caches, failed candidates and guest/import source bytes. Ordinary network failures retain their distinct recovery behavior.
+
+Direct source includes `lib/guest-learning.ts`, `lib/web-learning-sync.ts`, `app/GuestLearning.tsx`, `app/VocabularyApp.tsx`, daily/Express practice, `app/api/state/route.ts`, `lib/web-account.ts`, `lib/web-account-request.ts` and `app/WebAccountPanel.tsx`.
+
+No billing or paid entitlement is implemented. A future tier remains a planning topic, with no published price, period or feature promise.
+
+## Verification checkpoints
+
+| Scope | Actual result |
 | --- | --- |
-| Production build through the Sites build helper | Exit 0 |
-| `npm run typecheck` | Exit 0 |
-| Full repository ESLint | Exit 0 |
-| Full staged Node suite | **337/337 passed**, zero failures/skips; `.build/qa/2026-10-22-signin-idioms/staged-node-tests-final.log` |
-| Auth lifecycle and integrated UI checks | 14 lifecycle + 10 integrated UI checks passed, included in the 337 total |
-| Backend account and security checks | 10 account + 11 security checks passed, included in the 337 total |
-| Isolated PostgreSQL account/isolation/cascade checks | 8/8 passed; disposable local PostgreSQL/PGlite, synthetic identities and rollback; zero synthetic rows retained |
-| Earlier scoped sync and catalog checks | 30 sync/persistence, 33 Library/idiom UI/pagination and 2 catalog engine checks passed; do not add overlapping focused counts to the full-suite total |
-| Actual local Wrangler HTTP worker | **57/57 passed**: exact Korean query, idiom deep link, EN/KO/legal routes, two intentional `/start` 307 redirects, disabled account status, four expected gated account POST 503 responses, and all 29 public precache files |
-| Native behavior regression | **264/264 groups across 16 suites passed**, exit 0, zero failures; includes 21 shared-sync, 23 account QA, 22 daily and 7 localization groups |
-| GitHub delivery | Implementation `6cae19c9bbca457602fceaeec1bde3fefc83f576` pushed by normal fast-forward from `9146fdd4c01994aeae2e1a7a84e65417248a61dd`; remote `main` SHA verified |
-| Website delivery | Current live Site is version 7; no October 22 release receipt yet |
-| Actual browser/mobile viewport/provider journey | Unrun; HTTP/component checks do not establish these acceptance cases |
+| Earlier sign-in/idiom snapshot | Build/typecheck/lint and **337/337 Node checks**, zero failures/skips |
+| Signup follow-up before guest-first changes | Build/typecheck/repository lint passed; **344/344 Node checks**, zero failures/skips |
+| Initial signup full-suite attempt | 316 passed, eight PostgreSQL-dependent entries skipped; rerun with the existing `PGLITE_MODULE_PATH` produced the complete 344/344 result |
+| Final guest-first integrated JavaScript/TypeScript source | **414/414 Node checks**, zero failures/skips; production build/typecheck/repository ESLint passed |
+| Final CSS-only mobile button adjustment | Asset rebuild and **56/56 focused PWA/SSR/guest-UI checks passed**; no JavaScript change or added full-suite count |
+| Actual built local HTTP worker | **64/64 passed**, including 29 public precache files, anonymous/device PUT 401, cross-origin PUT 403 and gated auth POST 503 |
+| Prepared hosting candidate | 22 curated files (14 runtime, eight tests); build/typecheck/lint and **260/260 curated checks passed** |
+| Local guest-first Chrome acceptance | **79/79 passed**, actual desktop/mobile Chrome |
+| Earlier actual local Wrangler HTTP worker | **57/57 passed**; predates the signup and guest-first follow-ups |
+| Latest native regression | **264/264 groups across 16 suites**, zero failures; no subsequent native change is included in this web follow-up |
+| Version-8 hosted build | **153 curated tests** plus build/typecheck/lint passed |
+| Version-8 canonical delivery | **47 logical HTTP checks**, all **29 assets** byte-matched |
+| Version-8 isolated Chrome reference browsing | **12/12 desktop/mobile checks** passed |
+| Fresh hosted backend metadata/security | **16/16 checks** passed; all 11 function hashes match reviewed local definitions |
+| Real provider identity checks | Two approved Auth accounts verified, both sessions logged out; six first-account and two second-account checks passed |
+| Canonical web account acceptance | Not performed; code-entry email, cookies/restoration, cross-account saves/isolation/CAS and explicit import remain pending |
 
-The first full Node run reported 336 passes and one failure because generated `learning-locales.json` was out of sync with the authored source. The coordinator ran `npm run ios:content`; only `ios/Lucid/Lucid/Resources/learning-locales.json` changed. The final rerun passed all 337 checks. No learning IDs, progress or private writing were pruned to resolve the failure.
+The initial 337-suite run had previously found stale generated native localization. Running `npm run ios:content` updated only the generated localization resource; its final rerun passed. No progress IDs or private writing were pruned. The later 344 suite includes signup coverage; the final 414 suite includes the guest-first changes and account-snapshot regressions. A visually discovered mobile button flex-basis issue was corrected in CSS only, then rebuilt and covered by 56 focused checks. Overlapping focused counts are not added to the full-suite total.
 
-No hosted account was created/deleted and no real learner text was sent to a provider by these isolated tests. The local PostgreSQL runtime is under `/tmp/lucid-oct22-pg-runtime`; local security checks do not establish hosted Supabase ownership, SMTP delivery or independent simultaneous PostgreSQL connections. The local Wrangler account gates were expected results, not an accepted real-provider OTP journey.
+Evidence remains local and ignored under `.build/qa/2026-10-22-signin-idioms/` and `.build/qa/2026-10-22-guest-first/`. The final guest-first suite is `final-full-node.log`; final build/type/lint logs and `final-css-production-build.log`/`final-css-followup.log` retain the exact asset-validation results. `local-http-receipt.json` records all 64 worker checks. The preceding 344-suite receipt remains `signup-full-node-with-postgres.log`. Local PostgreSQL tests use disposable fixtures and synthetic sessions; they do not replace real hosted acceptance.
 
-The tested local worker was stopped and port **4778** was verified closed. The generated worker SHA-256 is `cc0ae898800667245fbffe83ecda0ac5cbd3dbc0b827e8d470ed594823cb9ddf`; service-worker SHA-256 is `de3e78a0b622de1898e9e3b66c013e39bfc862897064e3f42780db8304bb09e6`. The 213-file source snapshot matches staging. The full GitHub-eligible set contains 216 files, including retained protected baseline documents, with no private paths or symlinks.
+## Actual local guest-first browser acceptance
 
-Repository email templates use the code-only OTP marker `{{ .Token }}`. Account API calls use relative endpoints and do not put tokens in redirects. Hosted email-template configuration remains unverified and unchanged.
+A fresh isolated Chrome profile exercised the built local guest-first source with desktop and mobile layouts. The verification includes actual browser mouse/keyboard focus behavior, rather than only server rendering or component assertions. All **79/79 checks passed**, recorded in `.build/qa/2026-10-22-guest-first/local-browser-receipt.json`.
 
-## Current live state and observed blockers
+The passed journeys cover the public landing/catalog before personalization or sign-in; temporary guest practice and its five-item allowance; same-tab reload; and saving prompts that leave public browsing available. Keep browsing and Escape now dismiss the limit prompt without a focus loop. A captured browser trace before reload contained ten GET requests and no anonymous PUT.
 
-Site ownership/public audience and **version 7** were reconfirmed on 22 October through Site metadata, with runtime environment revision **0** and no environment entries. Observed account status is `enabled=false`, `emailReady=false`; automatic native/web shared-account sync is inactive. Native Release auth/email remain NO/NO.
+Dictionary checks cover the 93-item role list (13 items on its last page), all 472 words (12 on the last page), alphabetical order and filter/search page resets. Korean mobile checks cover catalog search, detail navigation and focus restoration. The final 390px viewport renders both corrected buttons at 47px high; the desktop viewport is 1440px. Native Chrome DevTools Protocol mouse and keyboard input verified Keep browsing and Escape, and public guest PWA update acceptance passed. Corrupt temporary storage still permits blank public browsing and repair access, without exposing a stale private account snapshot. Screenshots are `lucid-guest-ko-mobile-explore.png`, `lucid-guest-ko-desktop-explore.png` and `lucid-guest-ko-mobile-idiom.png` in the ignored QA directory.
 
-The previously documented hostname `idhnrnqrpyimknakpyrn.supabase.co` currently returns **NXDOMAIN (DNS status 3)** from both Cloudflare and Google DNS-over-HTTPS. `/auth/v1/health` failed DNS resolution (curl exit 6). The dashboard URL `https://supabase.com/dashboard/project/idhnrnqrpyimknakpyrn` returned HTTP 200 for a public shell; that is not authenticated ownership/schema/configuration evidence and does not prove the project currently exists. Do not infer that a new project should be created or guess a replacement URL.
+Legacy fixture bytes and the downloaded original backup remain exact; sign-in does not auto-import them. An actual local version-8 controller→version-9 server transition rejects the old anonymous PUT with 401 while preserving the source bytes. The old version-8 in-app Update button is disabled after that 401; an ordinary browser reload is required for the new UI. The seeded version-9 reload path was verified without clearing site data or force-activating a waiting worker.
 
-No authenticated Supabase connector, CLI, psql, session environment or current browser-control access was exposed for provider inspection in this execution context. The historical October 14 dashboard-login observation is not current access evidence. Current ownership, project reference, schema/RLS, email settings and capacity remain unverified. No DNS, production configuration or mail setting changed.
+These are controlled local fixtures. They establish the new source's guest/catalog behavior, not its public deployment, real canonical account sessions, physical touch hardware or installed/offline acceptance.
 
-GitHub SSH and `gh` authentication succeed for public `sunilnjc/Lucid` using the existing `github` SSH remote. Preparation began from canonical `main` `f6e9bffc5530091205142ecc904092ccc0b4dc64` and remote default `main` `9146fdd4c01994aeae2e1a7a84e65417248a61dd`; the remote baseline differed only by its README overview. The isolated `.build/github-release-20261022` clone preserves active canonical work and that remote documentation intent. These are preparation baselines, not a claim about the final pushed commit; the push receipt is reported separately.
+## Prepared publication artifact
 
-Old Sites release checkouts intentionally have no remotes/access credentials, and the 22 October Site metadata response again supplied no source credential. The publication action still needs reuse of existing source-write authorization for Site `appgprj_6a833d823f0481919f479e812c7998e8` through the official path. Existing access may be reused if the owner restores it. Otherwise, the official path may require `create_source_repository_write_credential`, which creates short-lived write access for this existing repository. That tool has not been called because the user forbids new credential creation. The precise remaining approval would be an exception only for this short-lived existing-Site repository credential, with no provider or infrastructure change. Do not create credentials or expand permissions without that explicit approval, and do not request website-publication consent again. No credential was created.
+The hosting candidate preserves runtime environment revision 0 and keeps auth off. Its 22-file curated delta contains 14 runtime files and eight tests. The final CSS change was rebuilt; the actual local 64/64 HTTP receipt was rechecked after that change.
 
-## Exact pending activation scope
+| Prepared artifact evidence | SHA-256 or value |
+| --- | --- |
+| Official publication artifact | `3020164b8ddcffe88b879163da95d1ef3184b3a536a6bb16c8dc92d84f9ed15e` |
+| Curated 22-file source delta | `65102c7e68fe8604a11bf3e1b0d50d91fcfd2dc008ac3c25623ef3a71b5c4a92` |
+| Candidate service worker | `9639c4d5d02a63edb32f4dec3c53c639235f4e7167d69394392fbd1f0e97500d` |
+| Candidate cache suffix | `403b060ccc526ad6` |
 
-1. **Establish the correct existing project and read access.** Obtain owner-confirmed current project/reference and authenticated read-only access using existing authorization. Inspect schema/migration history, RLS/grants/triggers, RPCs and existing email configuration without reading or printing secret configuration. Reuse the existing Supabase/Resend integration; no new provider, project, credentials or paid plan is proposed.
-2. **Approve only verified backend changes.** After that inspection, present the exact required migration diff and destination, with owner-only row/function/grant/configuration backups and a transaction/compatibility rollback. The prior proposals are `202609140002_lucid_payload_validation.sql` then `202610140001_lucid_shared_progress.sql`, are non-idempotent and must not be applied blindly to an unverified schema. Preserve learner UUIDs, history, source records and private writing; never join accounts by email.
-3. **Approve existing-account activation and test destinations.** After schema/RLS and isolated hosted acceptance pass, approve the existing project's URL/public-publishable key plus web shared-auth/email flags and approved owner-controlled test email recipients. No service-role key or local-test flag belongs in public configuration. Do not change Sites identity trust. Test real OTP, strict cookie/origin behavior, exact-UUID reverification, reconnect/CAS, account isolation and consented import with disposable approved records. `create_user:false` keeps public signup outside this scope. Native Release flags and phone installation remain unchanged unless separately authorized.
-4. **Keep publication/access boundaries explicit.** GitHub push and the learnwithlucid.com release are authorized. Existing Site source-write access may still need a narrow access grant if the official path cannot use current authorization; that does not authorize creating credentials. Do not claim deployment success until the release receipt and live acceptance are available.
+These identify the tested release candidate, not a new GitHub commit or successful public deployment. The current canonical deployment remains version 8.
 
-Provider/security activation needs specific approval because it modifies the live learning RPC/RLS/configuration and exposes verified email sign-in and synced metadata. Public website publication authorization does not establish correct provider ownership or approve those changes. No fixed free-tier capacity, price or old email rate is treated as current evidence.
 
-Automatic approval review rejected a new web account-deletion API as an unrequested irreversible feature. That product API/UI is omitted from this task. Existing isolated SQL cascade/isolation checks remain allowed; no hosted deletion was performed. Safe auth work continues without adding that feature.
+## New Supabase project and remaining activation
 
-## Preservation
+Authenticated discovery found the owner-approved Launch organization empty. After explicit approval, Lucid was created on Free in Singapore as `eaorljzxspmiexlmlfvb`. The $0/month provisioning quote is recorded without promising future capacity or pricing.
 
-Older QA/publication/rollout records, `CLAUDE.md`, `LOCAL_DEVELOPMENT.md`, `ios/AppStore/AUTH_SETUP.md`, private configuration and incidental `infra` are preserved. No raw private learner content, credentials or runtime databases belong in this repository record or release package. The native regression log is `.build/qa/2026-10-22-signin-idioms/native-regression.log`, SHA-256 `eaa926d08a04adcd53571019af7ea4480e78fac420134e4bfbed5285490874ad`; it used the regenerated localization resource SHA-256 `d06908b2d70ac4bbd63b9b0ebb6d4cd61c755eeb1047797d57e9f8a718ce4584`.
+The guarded initialization succeeded once and migration history records `20261022151015_lucid_initial_shared_schema`. It created six tables and eleven functions with the reviewed authored seeds. Hosted metadata confirmed own-row RLS on both learner tables, no anonymous application access, authenticated own-row SELECT plus public save-wrapper EXECUTE only, no direct client/column writes or schema CREATE, and no custom learner/Auth table triggers. Initial zero-row counts were checked before approved test accounts were created.
 
-A final read-only canonical-domain check on 22 October returned HTTP 200 for `/?lang=ko` and the idiom query. HTTP and www redirect to HTTPS apex with query preserved (308). Live account status remains disabled and live service-worker SHA-256 remains `79b49c18302ee7d851c991d67df05c1c74f806f813c379d1af5dcf4f9c124d4e`, confirming the old release is still served. No new deployment is claimed. GitHub implementation receipt: `6cae19c9bbca457602fceaeec1bde3fefc83f576`, normal push to `git@github.com:sunilnjc/Lucid.git` `main`, verified by `git ls-remote`. A documentation-only follow-up records the completed native run and this receipt. The final remote HEAD is reported in the task output.
+Two real owner-controlled test accounts were subsequently verified using legitimately delivered confirmation links and their provider sessions logged out. Own empty-state reads returned 200; anonymous reads/RPC and direct authenticated INSERT were denied. No learning records were written. These are basic provider checks, not two-account cross-read/write/CAS or canonical web-session acceptance.
+
+The existing publishable key was retrieved through the official filtered tool after authorization; no new key or service-role credential was created. Actual public provider settings require email confirmation and permit email signup. However, delivered messages still use the default confirmation link to **`localhost:3000`**, with **no numeric OTP**. No SMTP, Site URL or template configuration has been changed.
+
+The user authorized the necessary SMTP setup. Its remaining blocker is capability: the available official MCP groups lack Auth-configuration/SMTP controls, and the fresh test browser does not inherit an authenticated Supabase Dashboard session. See the setup record for exact canonical URL and code-template targets. Do not request the already retrieved publishable key again.
+
+Public auth remains gated. The tested hosting candidate and official publication artifact are prepared. A fresh narrowly scoped Sites source credential approval has been requested for the version-9 follow-up and is pending; the approved version-8 credential was already used. No new credential has been created for the pending follow-up. Website release authorization itself persists, and current public delivery remains version 8 until a later successful deployment receipt is verified.
+
+## Data preservation and limits
+
+Ordinary account sync includes the existing privacy-limited course progress, bookmarks and safe history projection. Daily idiom schedules, personal situations, originals/retries and freeform drafts are not promised full cross-device portability; explicit private backups may include personal writing. Matching email labels never merge separate UUIDs or recover records from the old project.
+
+Domain/mail DNS, the gateway, native configuration and the owner's installed app remain unchanged. Canonical dirty work and historical records, including `CLAUDE.md`, `LOCAL_DEVELOPMENT.md`, `ios/AppStore/AUTH_SETUP.md`, prior QA/publication records and incidental `infra`, are preserved.
+
+Automatic approval review previously rejected a new web account-deletion API as an unrequested irreversible feature. That product API/UI remains omitted. The allowed isolated cascade/isolation tests do not establish or perform hosted deletion.

@@ -3,9 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { createInstallController, installGuidance, prepareAppReload, type InstallPrompt, type InstallSnapshot } from "../lib/pwa-install";
 
-type Props = { canReload?: boolean; prepareReload?: () => boolean | Promise<boolean> };
+type Props = { canReload?: boolean; prepareReload?: () => boolean | Promise<boolean>; promoteInstall?: boolean };
 const initial: InstallSnapshot = { phase: "guidance", platform: "other", compact: false, error: null };
-export default function PWAInstall({ canReload = false, prepareReload }: Props) {
+export default function PWAInstall({ canReload = false, prepareReload, promoteInstall = true }: Props) {
   const [install, setInstall] = useState(initial);
   const [guidanceOpen, setGuidanceOpen] = useState(false);
   const [updateReady, setUpdateReady] = useState(false);
@@ -135,22 +135,27 @@ export default function PWAInstall({ canReload = false, prepareReload }: Props) 
     else window.location.reload();
   }
   const guidance = installGuidance(install.platform);
-  return <section className={`pwa-install ${install.compact ? "pwa-install-compact" : ""}`} aria-label="Lucid app installation">
+  const installPanel = <section className={`pwa-install ${install.compact ? "pwa-install-compact" : ""}`} aria-label="Lucid app installation">
     <div className="pwa-install-copy">
       <strong>{install.phase === "installed" ? "Lucid app view" : "Keep Lucid one tap away"}</strong>
       {!install.compact && <span>{install.phase === "installed" ? "You are using the standalone app view." : "Add Lucid to your Home Screen or app launcher."}</span>}
     </div>
     {install.phase !== "installed" && <button className="pwa-install-button" ref={opener} onClick={handleInstall} disabled={install.phase === "prompting"}>{install.phase === "prompting" ? "Opening prompt…" : install.phase === "requested" ? "Install help" : "Install app"}</button>}
     {install.phase !== "installed" && !install.compact && <button className="pwa-install-dismiss" onClick={() => installController.current?.dismiss()} aria-label="Dismiss installation suggestion">Later</button>}
-    {updateReady && <button className="pwa-install-button pwa-update-button" onClick={handleUpdate} disabled={updating || !canReload}>{updating ? "Updating…" : "Update app"}</button>}
+    {updateReady && promoteInstall && <button className="pwa-install-button pwa-update-button" onClick={handleUpdate} disabled={updating || !canReload}>{updating ? "Updating…" : "Update app"}</button>}
     <p className="pwa-install-notice" role="status" data-offline-ready={offlineStatus === "ready"}>{offlineStatus === "ready" ? "Offline app ready on this browser. Account sign-in still needs a connection." : offlineStatus === "unsupported" ? "Offline app setup is unavailable in this browser. You can practise while connected." : offlineStatus === "incomplete" ? "Offline setup is not ready yet. Keep Lucid open while connected, then try again." : "Preparing this browser for offline practice…"}</p>
     {(notice || install.error) && <p className="pwa-install-notice" role="status">{notice || install.error}</p>}
     <dialog ref={dialog} className="pwa-install-dialog" aria-labelledby="pwa-guidance-title" onCancel={() => setGuidanceOpen(false)} onClose={() => { setGuidanceOpen(false); opener.current?.focus(); }}>
       <h2 id="pwa-guidance-title">{guidance.title}</h2>
       <ol>{guidance.steps.map((step) => <li key={step}>{step}</li>)}</ol>
       <p>{guidance.note}</p>
-      <p>Your browser and the installed app may keep separate local storage. This launch supports guest practice and portable backups. Keep a backup before changing browsers or app views. When shared sign-in is enabled for your build, use the same Lucid account to sync supported progress. Personal situations and sentences stay on their originating device.</p>
+      <p>Your browser and the installed app may keep separate local storage. New guest practice is temporary for this tab’s session. Earlier local records are preserved; download their original backup from the guest notice before changing browsers or app views. When shared sign-in is enabled for your build, use the same Lucid account to sync supported progress. Personal situations and sentences stay on their originating device.</p>
       <button className="pwa-install-button" onClick={() => setGuidanceOpen(false)}>Got it</button>
     </dialog>
   </section>;
+  if (promoteInstall) return installPanel;
+  return <div className="pwa-optional-access">
+    {updateReady && <section className="pwa-update-notice" aria-label="Lucid app update"><p role="status">An app update is ready. Keep exploring or refresh when your current work is safe.</p><button className="pwa-install-button pwa-update-button" onClick={handleUpdate} disabled={updating || !canReload}>{updating ? "Updating…" : "Update app"}</button>{notice && <p role="status">{notice}</p>}</section>}
+    <details className="pwa-install-optional"><summary>App installation · optional</summary>{installPanel}</details>
+  </div>;
 }

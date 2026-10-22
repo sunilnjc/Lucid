@@ -1,6 +1,7 @@
 "use client";
 
 import { useLearningLanguage } from "./LearningLanguage";
+import { useGuestAccess } from "./GuestLearning";
 import { koreanWordSupport, koreanIdiomSupport } from "../lib/learning-locales";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -16,6 +17,7 @@ type Mutation = (state: State) => State;
 type Save = (mutate: Mutation) => boolean;
 
 function useDailySave({ day, profile, scopeKey, commit, blocked }: Omit<LearningProps, "profile"> & { profile: Profile | null }) {
+  const guest = useGuestAccess();
   const [notice, setNotice] = useState("");
   const pending = useRef<Mutation | null>(null);
   const save: Save = (mutate) => {
@@ -27,6 +29,7 @@ function useDailySave({ day, profile, scopeKey, commit, blocked }: Omit<Learning
     }, scopeKey);
     // Retrying an already-persisted candidate may require no further write.
     const success = accepted && (saved || unchanged);
+    if (!success && guest.active && guest.getGuestPrompt()) { pending.current = null; setNotice(""); return false; }
     pending.current = success ? null : mutate;
     setNotice(success ? "" : "Your change could not be saved. Your text stays here; retry before leaving.");
     return success;
@@ -95,6 +98,7 @@ export default function DailyVocabulary(props: LearningProps & { dateLabel: stri
 
 export function DailyWordCard({ state, day, profile, word, index, save, blocked }: { state: State; day: string; profile: Profile; word: ProfessionalWord; index: number; save: Save; blocked?: boolean }) {
   const { locale, t } = useLearningLanguage();
+  const guest = useGuestAccess();
   const support = locale === "ko" ? koreanWordSupport(word.id, profile.roleId) : undefined;
   const collection = dailyCollection(state, day, profile.roleId);
   const revealed = collection?.revealedWordIds.includes(word.id) === true;
@@ -106,19 +110,20 @@ export function DailyWordCard({ state, day, profile, word, index, save, blocked 
     <div className="card-top"><span>{t("WORD {index}", { index: index + 1 })} · {revealed ? t("Explored") : t("Ready to explore")}</span><span>{word.learningMode === "recognition" ? t("For understanding") : t("For everyday use")}</span></div>
     <h2 lang="en" id={`daily-word-${word.id}`}>{word.term}</h2>
     <p className="word-meta">{word.partOfSpeech}{word.pronunciation && ` · ${word.pronunciation}`}</p>
-    <label htmlFor={`daily-word-draft-${word.id}`}>{t("Your private recall or sentence")}{" "}<span className="muted">{t("(optional, ungraded)")}</span></label>
-    <textarea id={`daily-word-draft-${word.id}`} rows={2} maxLength={2000} autoComplete="off" readOnly={revealed || blocked} value={text} placeholder={t("What might it mean? How would you use it?")} onChange={(event) => { const value = event.target.value; setDraft(value); save((current) => saveDailyWordDraft(current, day, profile.roleId, word.id, value)); }} />
+    <label htmlFor={`daily-word-draft-${word.id}`}>{t("Your private recall or sentence")}{" "}<span className="muted">{guest.active ? locale === "ko" ? "(세션에만 임시 보관, 선택 사항)" : "(optional, session-only)" : t("(optional, ungraded)")}</span></label>
+    <textarea id={`daily-word-draft-${word.id}`} rows={2} maxLength={2000} autoComplete="off" readOnly={revealed || blocked || guest.active && !guest.canExploreItem(`word:${word.id}`)} onFocus={() => { if (guest.active && !guest.canExploreItem(`word:${word.id}`)) guest.requestAccount("limit"); }} value={text} placeholder={t("What might it mean? How would you use it?")} onChange={(event) => { const value = event.target.value; setDraft(value); save((current) => saveDailyWordDraft(current, day, profile.roleId, word.id, value)); }} />
     {!revealed ? <button className="secondary-button" disabled={blocked} onClick={reveal}>{t("Reveal meaning & example")}</button> : <div className="daily-guidance">
       <p className="daily-definition"><strong>{t("Meaning")}</strong><span lang="en">{word.meaning}</span></p>{locale === "ko" && (support ? <p className="korean-learning-support" lang="ko"><strong>{t("Korean meaning")}</strong>{support.meaning}{support.usage && <span>{support.usage}</span>}</p> : <p className="korean-translation-unavailable" lang="ko">{t("Korean support is not available for this entry yet. The original English guidance is shown.")}</p>)}
       <blockquote lang="en">{word.example}</blockquote>
       <details><summary>{t("When to use it")}</summary><p lang="en">{word.whenToUse}</p><p><strong>{t("Take care:")}</strong> {word.avoidOrMisuse}</p>{word.collocations.length > 0 && <p><strong>{t("Common combinations:")}</strong> {word.collocations.join(" · ")}</p>}</details>
-      <div className="daily-review-action"><button className="secondary-button" disabled={blocked || inReview} onClick={() => save((current) => addDailyWordToReview(current, day, profile.roleId, word.id))}>{inReview ? t("In spaced review") : t("Add to spaced review")}</button><small>{inReview ? t("Revisit it in Review when it is due.") : t("Starts tomorrow. Exploring does not count as a successful review.")}</small></div>
+      <div className="daily-review-action"><button className="secondary-button" disabled={blocked || inReview} onClick={() => guest.active ? guest.requestAccount("save") : save((current) => addDailyWordToReview(current, day, profile.roleId, word.id))}>{guest.active ? locale === "ko" ? "복습에 저장하려면 로그인" : "Sign in to save to review" : inReview ? t("In spaced review") : t("Add to spaced review")}</button><small>{inReview ? t("Revisit it in Review when it is due.") : t("Starts tomorrow. Exploring does not count as a successful review.")}</small></div>
     </div>}
   </article>;
 }
 
 export function DailyIdiomCard({ state, day, profile, idiom, save, blocked }: { state: State; day: string; profile: Profile; idiom: DailyIdiom; save: Save; blocked?: boolean }) {
-  const { t } = useLearningLanguage();
+  const { t, locale } = useLearningLanguage();
+  const guest = useGuestAccess();
   const practice = idiomPractice(state, day, idiom.id);
   const [draft, setDraft] = useState<string | null>(null);
   const text = practice?.revealed ? practice.originalResponse ?? practice.draft : draft ?? practice?.draft ?? "";
@@ -129,11 +134,11 @@ export function DailyIdiomCard({ state, day, profile, idiom, save, blocked }: { 
   return <article className="daily-idiom-card" aria-labelledby={`daily-idiom-${idiom.id}`}>
     <div className="card-top"><span>{due ? t("IDIOM SELF-CHECK DUE") : t("DAILY IDIOM")}</span><span>{practice?.reviewed ? t("Self-check saved") : revealed ? t("Explored") : t("Ready to explore")}</span></div>
     <h2 lang="en" id={`daily-idiom-${idiom.id}`}>{idiom.phrase}</h2>
-    <label htmlFor={`daily-idiom-draft-${idiom.id}`}>{due ? t("Recall the meaning or write a fresh example") : t("What do you think it means?")} <span className="muted">{t("(private, ungraded)")}</span></label>
-    <textarea id={`daily-idiom-draft-${idiom.id}`} rows={3} maxLength={2000} autoComplete="off" readOnly={revealed || blocked} value={text} placeholder={t("Use fictional details in your example.")} onChange={(event) => { const value = event.target.value; setDraft(value); save((current) => saveDailyIdiomDraft(current, day, profile.roleId, idiom.id, value)); }} />
+    <label htmlFor={`daily-idiom-draft-${idiom.id}`}>{due ? t("Recall the meaning or write a fresh example") : t("What do you think it means?")} <span className="muted">{guest.active ? locale === "ko" ? "(현재 세션에만 임시 보관)" : "(private, session-only)" : t("(private, ungraded)")}</span></label>
+    <textarea id={`daily-idiom-draft-${idiom.id}`} rows={3} maxLength={2000} autoComplete="off" readOnly={revealed || blocked || guest.active && !guest.canExploreItem(`idiom:${idiom.id}`)} onFocus={() => { if (guest.active && !guest.canExploreItem(`idiom:${idiom.id}`)) guest.requestAccount("limit"); }} value={text} placeholder={t("Use fictional details in your example.")} onChange={(event) => { const value = event.target.value; setDraft(value); save((current) => saveDailyIdiomDraft(current, day, profile.roleId, idiom.id, value)); }} />
     {!revealed ? <button className="secondary-button" disabled={blocked} onClick={reveal}>{t("Reveal meaning & usage")}</button> : <div className="daily-guidance">
       <IdiomGuidance idiom={idiom} />
-      {!schedule && <div className="daily-review-action"><button className="secondary-button" disabled={blocked} onClick={() => save((current) => addDailyIdiomToReview(current, day, profile.roleId, idiom.id))}>{t("Add idiom to spaced review")}</button><small>{t("Starts tomorrow. Idiom self-checks stay separate from word mastery and points.")}</small></div>}
+      {!schedule && <div className="daily-review-action"><button className="secondary-button" disabled={blocked} onClick={() => guest.active ? guest.requestAccount("save") : save((current) => addDailyIdiomToReview(current, day, profile.roleId, idiom.id))}>{guest.active ? locale === "ko" ? "관용어를 저장하려면 로그인" : "Sign in to save this idiom" : t("Add idiom to spaced review")}</button><small>{t("Starts tomorrow. Idiom self-checks stay separate from word mastery and points.")}</small></div>}
       {due && !practice?.reviewed ? <fieldset className="daily-idiom-assessment"><legend>{t("How did your original answer compare?")}</legend><p>{t("This saves your own judgement, without word mastery or points.")}</p><div className="button-row"><button className="secondary-button" disabled={blocked} onClick={() => save((current) => reviewDailyIdiom(current, day, profile.roleId, idiom.id, false))}>{t("Practise again")}</button><button className="secondary-button" disabled={blocked || !practice?.originalResponse?.trim()} onClick={() => save((current) => reviewDailyIdiom(current, day, profile.roleId, idiom.id, true))}>{t("I remembered it")}</button></div>{!practice?.originalResponse?.trim() && <p className="muted">{t("No original answer was saved before reveal. Use Practise again to revisit sooner.")}</p>}</fieldset> : <p className="muted">{practice?.reviewed ? t("Self-check saved. It will return when due.") : schedule ? t("In spaced review · next self-check {date}.", { date: schedule.nextReviewOn }) : t("Explored today. Add it to review if you want to revisit it.")}</p>}
     </div>}
   </article>;
@@ -169,7 +174,8 @@ export function searchIdiomCatalog(query: string): readonly DailyIdiom[] {
 
 type IdiomCollectionProps = Omit<LearningProps, "profile"> & { profile: Profile | null; onBack: () => void; onSetup?: () => void };
 export function IdiomCollection(props: IdiomCollectionProps) {
-  const { t } = useLearningLanguage();
+  const guest = useGuestAccess();
+  const { t, locale } = useLearningLanguage();
   const { state, day, profile, onBack, onSetup } = props;
   const [listing, setListing] = useState({ query: "", page: 1 });
   const query = listing.query;
@@ -196,7 +202,7 @@ export function IdiomCollection(props: IdiomCollectionProps) {
   const entries = page.items;
   const today = dailyIdiom(state, day).id;
   const open = (idiom: DailyIdiom) => {
-    if (blocked || (profile && !save(current => revealCatalogIdiom(current, day, profile.roleId, idiom.id)))) return;
+    if (blocked || (!guest.active && profile && !save(current => revealCatalogIdiom(current, day, profile.roleId, idiom.id)))) return;
     requestedFocus.current = { kind: "detail", id: idiom.id };
     setSelectedId(idiom.id); window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -215,7 +221,7 @@ export function IdiomCollection(props: IdiomCollectionProps) {
       <div className="card-top"><span>{t("Idiom guidance")}</span>{selected.id === today && <span>{t("Today’s Idiom")}</span>}</div>
       <h2 ref={idiomHeading} tabIndex={-1} id={`idiom-reference-${selected.id}`} lang="en">{selected.phrase}</h2>
       <div className="daily-guidance"><IdiomGuidance idiom={selected} /></div>
-      {profile ? <div className="daily-review-action"><button className="secondary-button" disabled={blocked || Boolean(idiomReviewSchedule(state, selected.id))} onClick={() => save(current => addCatalogIdiomToReview(current, day, profile.roleId, selected.id))}>{idiomReviewSchedule(state, selected.id) ? t("In your review schedule") : t("Add idiom to spaced review")}</button><small>{idiomReviewSchedule(state, selected.id) ? t("In spaced review · next self-check {date}.", { date: idiomReviewSchedule(state, selected.id)!.nextReviewOn }) : t("Starts tomorrow. Idiom self-checks stay separate from word mastery and points.")}</small></div> : onSetup && <div className="daily-review-action"><button className="secondary-button" onClick={onSetup}>{t("Set up my course")}</button><small>{t("Set up your course to choose idioms for spaced review.")}</small></div>}
+      {profile ? <div className="daily-review-action"><button className="secondary-button" disabled={blocked || Boolean(idiomReviewSchedule(state, selected.id))} onClick={() => guest.active ? guest.requestAccount("save") : save(current => addCatalogIdiomToReview(current, day, profile.roleId, selected.id))}>{idiomReviewSchedule(state, selected.id) ? t("In your review schedule") : t("Add idiom to spaced review")}</button><small>{idiomReviewSchedule(state, selected.id) ? t("In spaced review · next self-check {date}.", { date: idiomReviewSchedule(state, selected.id)!.nextReviewOn }) : t("Starts tomorrow. Idiom self-checks stay separate from word mastery and points.")}</small></div> : onSetup && <div className="daily-review-action"><button className="secondary-button" onClick={() => guest.active ? guest.requestAccount("save") : onSetup()}>{guest.active ? locale === "ko" ? "로그인하여 저장" : "Sign in to save" : t("Set up my course")}</button><small>{guest.active ? locale === "ko" ? "관용어를 계정에 보관하려면 로그인하세요." : "Sign in to keep this idiom in your account." : t("Set up your course to choose idioms for spaced review.")}</small></div>}
     </article> : <>
       <div className="library-tools"><label htmlFor="idiom-search">{t("Search idioms")}</label><input id="idiom-search" type="search" value={query} onChange={event => setListing({ query: event.target.value, page: 1 })} placeholder={t("Search idioms, meanings or usage")} /></div>
       <p className="muted">{t("Choose an idiom to read its meaning and usage.")}</p>

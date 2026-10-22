@@ -1,10 +1,10 @@
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { env } from "cloudflare:workers";
-import { accountJSON, hasSharedSession, requireSameOrigin, sharedBackendRequest, verifiedSharedAccount, WebAccountError, type VerifiedSharedAccount } from "@/lib/web-account";
+import { accountJSON, requireSameOrigin, sharedBackendRequest, verifiedSharedAccount, WebAccountError, type VerifiedSharedAccount } from "@/lib/web-account";
 import { validateSharedCloudState } from "@/lib/shared-learning-state";
 import { getDb, initializeDatabase } from "@/db";
 import { learnerState } from "@/db/schema";
-import { MAX_STATE_BYTES, mergeWebStates, prepareWebState, toCloudWebState, validateWebState } from "@/lib/web-learning-state";
+import { MAX_STATE_BYTES, prepareWebState, toCloudWebState, validateWebState } from "@/lib/web-learning-state";
 function learnerKey(request: Request) {
   const authenticated = request.headers.get("oai-authenticated-user-id");
   // Shared mode cannot treat a browser-supplied Sites header as identity proof.
@@ -45,12 +45,13 @@ export async function GET(request: Request) {
 export async function PUT(request: Request) {
   let account: VerifiedSharedAccount | null;
   try {
-    // Shared writes are protected by same-origin checks even when a token is expired.
-    if (hasSharedSession(request)) requireSameOrigin(request);
+    // Every durable save needs the same-origin, provider-verified learner account.
+    requireSameOrigin(request);
     account = await verifiedSharedAccount(request, environment());
   } catch (error) { return accountFailure(request, error); }
-  const identity = learnerKey(request);
-  if (!identity && !account) return json({ error: "A signed-in user or device identifier is required." }, 401);
+  // Device and historical Sites identities keep their read/import path, but
+  // cannot create or update durable learning records in guest-first mode.
+  if (!account) return accountJSON(request, { error: "Sign in to save words and learning progress. Guest learning stays in this session.", requiresSignIn: true, guestSessionOnly: true }, 401);
   if (Number(request.headers.get("content-length")) > MAX_STATE_BYTES + 100) return json({ error: "Learning state is too large." }, 413);
   let body: unknown;
   try {
@@ -58,31 +59,11 @@ export async function PUT(request: Request) {
     if (new TextEncoder().encode(raw).byteLength > MAX_STATE_BYTES + 100) return json({ error: "Learning state is too large." }, 413);
     body = JSON.parse(raw);
   } catch { return json({ error: "Request body must be valid JSON." }, 400); }
-  if (account) {
-    try {
-      const shared = body as { scopeKey?: unknown; sharedState?: unknown; expectedRevision?: unknown } | null;
-      if (!shared || shared.scopeKey !== account.identity) return accountJSON(request, { identity: account.identity, error: "The learner account changed. Reload before saving." }, 409, account.cookies);
-      if (!Number.isSafeInteger(shared.expectedRevision) || Number(shared.expectedRevision) < 0 || !validateSharedCloudState(shared.sharedState)) return accountJSON(request, { error: "Request body must include a supported shared learning record and revision." }, 400, account.cookies);
-      await sharedBackendRequest(account, "rest/v1/rpc/lucid_save_state", { method: "POST", body: { expected_revision: shared.expectedRevision, new_state: shared.sharedState } });
-      return accountJSON(request, await getSharedRecord(account), 200, account.cookies);
-    } catch (error) { return accountFailure(request, error, account.cookies); }
-  }
-  if (!identity) return json({ error: "A verified legacy identity or device identifier is required." }, 401);
-  if (!body || typeof body !== "object" || !validateWebState((body as { state?: unknown }).state)) return json({ error: "Request body must include a supported learning state." }, 400);
-  if ((body as { scopeKey?: unknown }).scopeKey !== identity) return json({ identity, error: "The learning identity changed. Reload before saving." }, 409);
-  const incoming = toCloudWebState(prepareWebState((body as { state: unknown }).state));
   try {
-    await initializeDatabase(); const db = getDb();
-    for (let attempt = 0; attempt < 5; attempt++) {
-      const row = await db.query.learnerState.findFirst({ columns: { state: true, updatedAt: true }, where: eq(learnerState.userKey, identity) });
-      if (row && !validateWebState(row.state)) return json({ error: "The saved record requires recovery before it can be replaced." }, 422);
-      const state = row ? toCloudWebState(mergeWebStates(row.state, incoming)) : incoming;
-      const now = new Date(Math.max(Date.now(), (row?.updatedAt.getTime() ?? 0) + 1));
-      const saved = row
-        ? await db.update(learnerState).set({ state, updatedAt: now }).where(and(eq(learnerState.userKey, identity), eq(learnerState.updatedAt, row.updatedAt))).returning({ userKey: learnerState.userKey })
-        : await db.insert(learnerState).values({ userKey: identity, state, createdAt: now, updatedAt: now }).onConflictDoNothing().returning({ userKey: learnerState.userKey });
-      if (saved.length) return json({ identity, state });
-    }
-    return json({ error: "Another device is updating this record. Retry to merge both records." }, 409);
-  } catch { return json({ error: "Unable to save app state." }, 500); }
+    const shared = body as { scopeKey?: unknown; sharedState?: unknown; expectedRevision?: unknown } | null;
+    if (!shared || shared.scopeKey !== account.identity) return accountJSON(request, { identity: account.identity, error: "The learner account changed. Reload before saving." }, 409, account.cookies);
+    if (!Number.isSafeInteger(shared.expectedRevision) || Number(shared.expectedRevision) < 0 || !validateSharedCloudState(shared.sharedState)) return accountJSON(request, { error: "Request body must include a supported shared learning record and revision." }, 400, account.cookies);
+    await sharedBackendRequest(account, "rest/v1/rpc/lucid_save_state", { method: "POST", body: { expected_revision: shared.expectedRevision, new_state: shared.sharedState } });
+    return accountJSON(request, await getSharedRecord(account), 200, account.cookies);
+  } catch (error) { return accountFailure(request, error, account.cookies); }
 }

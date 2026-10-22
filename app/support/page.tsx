@@ -29,12 +29,18 @@ export default function SupportPage() {
 
           <section>
             <h2>What is available in English and Korean?</h2>
-            <p>The introduction pages are available in English and Korean. The learning app offers an English/Korean choice for navigation, onboarding, daily Words/Idiom and Review instructions. Korean meanings and short usage notes support every role-word sense and all daily idioms; original English terms and examples remain visible. Course narratives, Express scenarios, Library/Progress details, account help, detailed settings, feedback forms, privacy policy and this support page remain in English.</p>
+            <p>The introduction pages are available in English and Korean. The learning app offers an English/Korean choice for navigation, onboarding, daily Words/Idiom and Review instructions. Korean meanings and short usage notes support every role-word sense and all daily idioms; original English terms and examples remain visible. Course narratives, Express scenarios, Library/Progress details, detailed settings, feedback forms, privacy policy and this support page remain in English.</p>
           </section>
 
           <section>
             <h2>Why is daily learning limited to one to three words?</h2>
             <p>Lucid is designed for active use, not list collection. One to three words leave time to understand the context, practise a response, and retrieve it again over 1, 3, 7, 14, and 30 days. Ten-word discovery collections let you browse without marking every word learned or mastered.</p>
+          </section>
+
+          <section>
+            <h2>What happens to guest learning?</h2>
+            <p>You can browse the word dictionary, idioms and course information without an account. New guest practice is temporary for this tab. The session notice shows how many different words, idioms or expressions you can try; revisiting those items and reference browsing remain available when that allowance is reached.</p>
+            <p>When account saving is available, verify your email to save words and supported progress. Guest work does not move into an account automatically. Choose an explicit import after signing in; this keeps its source and excludes private writing. Earlier local records are preserved, and the guest notice offers their original backup when one is available.</p>
           </section>
 
           <section>
@@ -54,24 +60,24 @@ export default function SupportPage() {
 
           <section>
             <h2>How do I erase my data?</h2>
-            <p>For guest iOS learning, open Settings → Erase learning data. A signed-in iOS account has a separate deletion flow that requires fresh verification and confirmation. Signing out or clearing browser site data does not delete saved cloud progress. Export a private backup before removing local data you want to keep. For optional beta-feedback deletion, request help with the approximate submission date; do not repost private feedback in a public GitHub issue.</p>
+            <p>For guest iOS learning, open Settings → Erase learning data. A signed-in iOS account has a separate deletion flow that requires fresh verification and confirmation. Signing out or clearing browser site data does not delete saved cloud progress. Download any available original earlier local backup before removing records you want to keep. An enabled account can export its current learning backup after verification. New guest practice remains temporary until you choose to import supported progress into a verified account. For optional beta-feedback deletion, request help with the approximate submission date; do not repost private feedback in a public GitHub issue.</p>
           </section>
 
           <section>
             <h2>Can I use Lucid offline?</h2>
-            <p>The iOS app bundles eight courses and 472 terms, local checks, progress and spaced review. Once web offline setup finishes during an online visit, its public app shell and courses can open offline. Guest progress stays saved in that browser. In builds with shared sign-in enabled, an already verified open account session can save edits during a connection loss; a cold offline start opens guest storage until the account can be verified online. Speech recognition availability can depend on installed language resources. Beta feedback and support pages need internet access.</p>
+            <p>The iOS app bundles eight courses and 472 terms, local checks, progress and spaced review. Once web offline setup finishes during an online visit, its public app shell and courses can open offline. New web guest practice stays in this tab’s temporary session and can be lost when the tab closes. If temporary browser storage is unavailable, a refresh can also lose that new guest work. In builds with shared sign-in enabled, an already verified open account session can keep local edits during a connection loss; a cold offline start opens temporary guest practice until the account can be verified online. Speech recognition availability can depend on installed language resources. Beta feedback and support pages need internet access.</p>
           </section>
 
           <section>
             <h2>How do I keep web and mobile progress together?</h2>
-            <p>This public release uses guest learning and portable backups. Shared-account sign-in is not enabled, so automatic web and mobile progress synchronization is unavailable. Use Settings → Learning backup to export a private backup and explicitly import it on another device. Browser and installed-app storage may differ; keep your backup private because it can include personal writing.</p>
-            <p>In builds with shared sign-in enabled, the same verified Lucid account can synchronize course progress, bookmarks, checkpoints, selected authored phrasing and practice history. Personal situations, original sentences and retries stay on their originating device. Guest or earlier web work joins an account only through an explicit merge.</p>
+            <p>Account saving depends on the build and service being available; the Account section shows its current status. When it is unavailable, you can continue browsing and trying temporary guest practice. Earlier local records are preserved; download their original backup from the guest notice when available. Browser and installed-app storage may differ.</p>
+            <p>Compatible web and mobile builds configured for the same account service can synchronize supported course progress, bookmarks, checkpoints, selected authored phrasing and practice history through the same verified account. Personal situations, original sentences and retries stay on their originating device. Guest or earlier web work joins an account only through an explicit merge that excludes private writing. To move private writing yourself, use an explicit portable backup; web backup export and import for current learning require account verification when account saving is available.</p>
           </section>
 
           <section>
             <h2>How do I install Lucid as a web app?</h2>
-            <p>Choose Install app inside Lucid. Supported browsers may open their own installation prompt. On iPhone or iPad, open Lucid in Safari, tap Share, then Add to Home Screen. Keep Open as Web App on if offered, then tap Add. On older iOS versions, use Safari. The browser completes installation; Lucid cannot add an iPhone icon with one tap.</p>
-            <p>Open Lucid from the new Home Screen icon or app launcher for the standalone app view. Browser and installed-app storage may differ. In this guest release, keep a private learning backup before changing browsers or app views. When Update app appears, finish or save current work before choosing to refresh.</p>
+            <p>Open the optional App installation section inside Lucid, then choose Install app. Supported browsers may open their own installation prompt. On iPhone or iPad, open Lucid in Safari, tap Share, then Add to Home Screen. Keep Open as Web App on if offered, then tap Add. On older iOS versions, use Safari. The browser completes installation; Lucid cannot add an iPhone icon with one tap.</p>
+            <p>Open Lucid from the new Home Screen icon or app launcher for the standalone app view. Browser and installed-app storage may differ. New guest practice is temporary for its tab. Before changing browsers or app views, download any available original earlier local backup or export an enabled account’s current learning backup after verification. Keep backups private because they can include personal writing. When Update app appears, finish or retry saving current work before choosing to refresh.</p>
           </section>
 
           <section>

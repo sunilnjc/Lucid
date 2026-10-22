@@ -1,11 +1,18 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, writeFile, mkdtemp } from "node:fs/promises";
+import { rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { stripTypeScriptTypes } from "node:module";
 import test from "node:test";
 
+const sourceModuleURLs = new Map();
 async function load(path) {
   const source = stripTypeScriptTypes(await readFile(new URL(`../${path}`, import.meta.url), "utf8"));
-  return import(`data:text/javascript;base64,${Buffer.from(source).toString("base64")}`);
+  const url = `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
+  sourceModuleURLs.set(path, url);
+  return import(url);
 }
 const feature = await load("lib/expression-content.ts");
 const catalogue = await load("lib/professional-content.ts");
@@ -196,17 +203,45 @@ test("reentrant or throwing commits cannot advance twice and release the save ga
 
 async function loadExpressionComponent() {
   const ts = (await import("typescript")).default;
-  const componentSource = await readFile(new URL("../app/ExpressionPractice.tsx", import.meta.url), "utf8");
-  const sources = await Promise.all(["lib/professional-content.ts", "lib/expression-content.ts"].map(async (path) => {
-    const source = stripTypeScriptTypes(await readFile(new URL(`../${path}`, import.meta.url), "utf8"));
-    return `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
-  }));
-  let compiled = ts.transpileModule(componentSource, { compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX } }).outputText;
-  compiled = compiled.replaceAll('"react"', JSON.stringify(import.meta.resolve("react")))
-    .replaceAll('"react/jsx-runtime"', JSON.stringify(import.meta.resolve("react/jsx-runtime")))
-    .replaceAll('"../lib/professional-content"', JSON.stringify(sources[0]))
-    .replaceAll('"../lib/expression-content"', JSON.stringify(sources[1]));
-  return await import(`data:text/javascript;base64,${Buffer.from(compiled).toString("base64")}`);
+  const root = new URL("../", import.meta.url);
+  const directory = await mkdtemp(join(tmpdir(), "lucid-expression-ui-"));
+  // Cleanup belongs to this process-owned fixture. A process-exit hook avoids
+  // racing the earlier tests while this top-level module graph is loading.
+  process.once("exit", () => rmSync(directory, { recursive: true, force: true }));
+  const modules = new Map(sourceModuleURLs);
+  async function moduleURL(relative) {
+    if (!modules.has(relative)) modules.set(relative, (async () => {
+      const sourceURL = new URL(relative, root);
+      let { outputText } = ts.transpileModule(await readFile(sourceURL, "utf8"), {
+        compilerOptions: { module: ts.ModuleKind.ES2022, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX }, fileName: relative,
+      });
+      const parsed = ts.createSourceFile(relative, outputText, ts.ScriptTarget.ESNext, true, ts.ScriptKind.JS), edits = [];
+      for (const statement of parsed.statements) {
+        if (!(ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) || !statement.moduleSpecifier || !ts.isStringLiteral(statement.moduleSpecifier)) continue;
+        const specifier = statement.moduleSpecifier, name = specifier.text;
+        let url;
+        if (!name.startsWith(".")) url = import.meta.resolve(name);
+        else {
+          const dependency = new URL(name, sourceURL);
+          if (!dependency.pathname.startsWith(root.pathname)) throw new Error("Expression UI fixture import escaped the repository");
+          if (!/\.[cm]?[jt]sx?$/.test(dependency.pathname)) {
+            try { await readFile(new URL(dependency.href + ".ts"), "utf8"); dependency.pathname += ".ts"; }
+            catch (error) { if (error.code !== "ENOENT") throw error; dependency.pathname += ".tsx"; }
+          }
+          url = await moduleURL(dependency.pathname.slice(root.pathname.length));
+        }
+        edits.push({ start: specifier.getStart(parsed), end: specifier.end, value: JSON.stringify(url) });
+      }
+      for (const edit of edits.sort((a, b) => b.start - a.start)) outputText = outputText.slice(0, edit.start) + edit.value + outputText.slice(edit.end);
+      const path = join(directory, relative.replaceAll("/", "_") + ".mjs");
+      await writeFile(path, outputText);
+      return pathToFileURL(path).href;
+    })());
+    return modules.get(relative);
+  }
+  // Shared caches retain the actual language and guest context identities across
+  // the component graph; their production hooks are not replaced by stubs.
+  return import(await moduleURL("app/ExpressionPractice.tsx"));
 }
 const component = await loadExpressionComponent();
 const ExpressionPractice = component.default;
@@ -326,7 +361,7 @@ test("rendered nuance asks for a choice and restores targeted recognition feedba
   assert.match(wrong, /An explanation of a decision is not proof of its outcome/);
   const right = renderWorkspace({ version: 1, roleId: "finance-accounting", screen: "find", nuanceAnswers: { [key]: { choice: "fitting", recognizedOn: "2026-10-13", attemptId: "bcf2d727-06ce-4434-a119-402d078fa2c5" } } });
   assert.match(right, /This fits the authored distinction/);
-  assert.match(right, /Recognition saved once for this comparison/);
+  assert.match(right, /Recognition noted once for this comparison\. Repeating it adds no new credit\./);
   assert.match(right, /Choose plain English when it is clearer or warmer/);
 });
 
